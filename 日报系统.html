@@ -1,0 +1,2380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L4 产能爬坡日报系统</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --primary: #1a3a5c;
+  --accent: #2196F3;
+  --success: #4CAF50;
+  --warning: #FF9800;
+  --danger: #f44336;
+  --light-bg: #f5f7fa;
+}
+body { background: var(--light-bg); font-family: 'Microsoft YaHei', Arial, sans-serif; font-size: 14px; }
+.app-header {
+  background: linear-gradient(135deg, #1a3a5c 0%, #2c5282 100%);
+  color: white; padding: 12px 20px;
+  display: flex; align-items: center; gap: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.app-header h1 { font-size: 18px; margin: 0; font-weight: 700; letter-spacing: 1px; }
+.app-header .badge-line { font-size: 11px; opacity: .85; }
+.date-selector { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3);
+  color: white; border-radius: 6px; padding: 4px 10px; font-size: 13px; }
+.date-selector:focus { outline: none; box-shadow: 0 0 0 2px rgba(255,255,255,.4); }
+.btn-today { background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.4);
+  color: white; border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+.btn-today:hover { background: rgba(255,255,255,.35); }
+.nav-tabs { border-bottom: 2px solid #dee2e6; background: white;
+  padding: 0 16px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.nav-tabs .nav-link { color: #666; font-weight: 600; font-size: 13px; padding: 10px 20px;
+  border: none; border-bottom: 3px solid transparent; border-radius: 0; }
+.nav-tabs .nav-link.active { color: var(--accent); border-bottom-color: var(--accent); background: transparent; }
+.nav-tabs .nav-link:hover { color: var(--primary); border-bottom-color: #ccc; }
+.tab-icon { font-size: 15px; margin-right: 5px; }
+.tab-content { padding: 16px; }
+.card { border: none; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.08); margin-bottom: 14px; }
+.card-header { background: var(--primary); color: white; font-weight: 600; font-size: 13px;
+  border-radius: 10px 10px 0 0 !important; padding: 8px 14px; }
+.card-header.me-header { background: #c0392b; }
+.card-header.pe-header { background: #27ae60; }
+.card-header.secondary-header { background: #546e7a; }
+.stat-card { border-radius: 10px; padding: 14px 16px; color: white; text-align: center; }
+.stat-card .stat-val { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.stat-card .stat-lbl { font-size: 11px; opacity: .9; margin-top: 3px; }
+.stat-card.blue { background: linear-gradient(135deg, #2196F3, #1565C0); }
+.stat-card.green { background: linear-gradient(135deg, #4CAF50, #2E7D32); }
+.stat-card.orange { background: linear-gradient(135deg, #FF9800, #E65100); }
+.stat-card.red { background: linear-gradient(135deg, #f44336, #b71c1c); }
+.stat-card.purple { background: linear-gradient(135deg, #9C27B0, #6A1B9A); }
+.stat-card.teal { background: linear-gradient(135deg, #009688, #00695C); }
+.form-label { font-weight: 600; font-size: 12px; color: #555; margin-bottom: 3px; }
+.form-control, .form-select { font-size: 13px; border-radius: 6px; }
+.form-control:focus, .form-select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(33,150,243,.2); }
+.btn-primary { background: var(--accent); border-color: var(--accent); font-size: 13px; }
+.btn-sm { font-size: 12px; padding: 3px 10px; }
+.table { font-size: 12px; }
+.table th { background: #eceff1; font-weight: 600; color: #37474f; white-space: nowrap; }
+.table td { vertical-align: middle; }
+.badge-done { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.badge-ongoing { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+.badge-pending { background: #fce4ec; color: #c62828; border: 1px solid #ef9a9a; }
+.badge-pm { background: #e3f2fd; color: #1565c0; }
+.badge-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+.chart-container { position: relative; min-height: 260px; }
+.section-title { font-size: 13px; font-weight: 700; color: var(--primary);
+  padding: 6px 0 6px 10px; border-left: 3px solid var(--accent); margin-bottom: 10px; }
+.data-table-wrap { max-height: 340px; overflow-y: auto; border-radius: 8px; }
+.data-table-wrap table { margin: 0; }
+.data-table-wrap thead th { position: sticky; top: 0; z-index: 1; }
+.today-row { background: #e3f2fd !important; font-weight: 600; }
+.pm-row td { background: #f3e5f5 !important; color: #7b1fa2; font-style: italic; }
+.gap-pos { color: #2e7d32; font-weight: 600; }
+.gap-neg { color: #c62828; font-weight: 600; }
+.achievement-good { color: #2e7d32; }
+.achievement-bad { color: #c62828; }
+/* ---- 驾驶舱 ---- */
+.db-header { background: linear-gradient(135deg,#0d1b2a 0%,#1a3a5c 60%,#1565C0 100%);
+  color:white; padding:10px 18px; display:flex; align-items:center; justify-content:space-between;
+  border-radius:10px 10px 0 0; }
+.db-header h6 { margin:0; font-size:13px; font-weight:700; letter-spacing:.5px; }
+.db-header .db-ts { font-size:11px; opacity:.75; }
+.kpi-block { border-radius:12px; padding:16px 14px; color:white; position:relative; overflow:hidden; }
+.kpi-block::after { content:''; position:absolute; right:-18px; top:-18px; width:70px; height:70px;
+  border-radius:50%; background:rgba(255,255,255,.08); }
+.kpi-block .kpi-v { font-size:30px; font-weight:800; line-height:1; }
+.kpi-block .kpi-sub { font-size:11px; opacity:.88; margin-top:4px; }
+.kpi-block .kpi-lbl { font-size:12px; opacity:.9; margin-top:2px; font-weight:600; }
+.kpi-block .kpi-tag { position:absolute; right:10px; top:10px; font-size:20px; opacity:.35; }
+.kpi-prod  { background:linear-gradient(135deg,#1565C0,#0d47a1); }
+.kpi-ach   { background:linear-gradient(135deg,#00897b,#004d40); }
+.kpi-gap   { background:linear-gradient(135deg,#6a1b9a,#4a148c); }
+.kpi-loss  { background:linear-gradient(135deg,#e65100,#bf360c); }
+.kpi-fty   { background:linear-gradient(135deg,#2e7d32,#1b5e20); }
+.kpi-issue { background:linear-gradient(135deg,#c62828,#7f0000); }
+.gauge-ring { transform-origin:50% 50%; transition:stroke-dashoffset .6s ease; }
+.db-section { font-size:12px; font-weight:700; color:#37474f; border-left:3px solid #2196F3;
+  padding-left:8px; margin:12px 0 8px; letter-spacing:.3px; }
+.issue-mini { border-radius:8px; padding:8px 10px; margin-bottom:6px; font-size:12px;
+  border-left:3px solid transparent; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.07); }
+.issue-mini.ongoing { border-left-color:#FF9800; }
+.issue-mini.done    { border-left-color:#4CAF50; }
+.issue-mini.pending { border-left-color:#f44336; }
+.issue-mini .im-top { display:flex; align-items:center; gap:6px; margin-bottom:2px; }
+.issue-mini .im-station { font-weight:700; color:#1a3a5c; }
+.issue-mini .im-action { color:#555; line-height:1.3; }
+.db-refresh { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); color:white;
+  font-size:11px; border-radius:6px; padding:3px 10px; cursor:pointer; }
+.db-refresh:hover { background:rgba(255,255,255,.3); }
+.spark-bar { display:inline-block; width:6px; border-radius:2px; vertical-align:bottom; background:#2196F3; }
+/* ---- 密码锁屏 ---- */
+#lockScreen {
+  position:fixed; inset:0; z-index:9999;
+  background:linear-gradient(135deg,#0d1b2a 0%,#1a3a5c 60%,#1565C0 100%);
+  display:flex; align-items:center; justify-content:center;
+}
+.lock-box {
+  background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.15);
+  border-radius:16px; padding:40px 36px; width:340px; text-align:center;
+  backdrop-filter:blur(10px); box-shadow:0 8px 32px rgba(0,0,0,.4);
+}
+.lock-box .lock-icon { font-size:48px; margin-bottom:12px; }
+.lock-box h2 { color:white; font-size:18px; font-weight:700; margin-bottom:4px; }
+.lock-box p { color:rgba(255,255,255,.65); font-size:12px; margin-bottom:20px; }
+.lock-input { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25);
+  color:white; border-radius:8px; padding:10px 14px; font-size:15px; width:100%;
+  text-align:center; letter-spacing:4px; outline:none; }
+.lock-input::placeholder { letter-spacing:1px; color:rgba(255,255,255,.4); font-size:13px; }
+.lock-input:focus { border-color:rgba(255,255,255,.6); background:rgba(255,255,255,.18); }
+.lock-btn { background:linear-gradient(135deg,#2196F3,#1565C0); border:none; color:white;
+  border-radius:8px; padding:10px; width:100%; font-size:14px; font-weight:700;
+  cursor:pointer; margin-top:12px; }
+.lock-btn:hover { opacity:.9; }
+.lock-error { color:#ff8a80; font-size:12px; margin-top:8px; min-height:18px; }
+.lock-hint { color:rgba(255,255,255,.4); font-size:11px; margin-top:12px; }
+.pareto-period { font-size: 12px; }
+.issue-row { cursor: pointer; }
+.issue-row:hover { background: #f5f5f5; }
+.btn-icon { background: none; border: none; cursor: pointer; font-size: 14px; padding: 2px 5px; }
+.btn-icon:hover { transform: scale(1.2); }
+.modal-header { background: var(--primary); color: white; }
+.input-group-text { font-size: 12px; }
+.progress { height: 8px; border-radius: 4px; }
+.top3-badge { background: var(--primary); color: white; width: 22px; height: 22px;
+  border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; margin-right: 6px; }
+.top3-badge.gold { background: #f9a825; }
+.top3-badge.silver { background: #78909c; }
+.top3-badge.bronze { background: #bf8c5a; }
+.fty-target-line { stroke: #f44336; }
+.no-data { color: #9e9e9e; font-style: italic; font-size: 12px; text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+
+<!-- ==================== 锁屏 ==================== -->
+<div id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-icon">🔒</div>
+    <h2>L4 产能爬坡日报系统</h2>
+    <p>动力电池产线 · 请输入访问密码</p>
+    <input type="password" id="lockInput" class="lock-input" placeholder="请输入密码" maxlength="20"
+      onkeydown="if(event.key==='Enter') doUnlock()">
+    <button class="lock-btn" onclick="doUnlock()">进 入</button>
+    <div class="lock-error" id="lockError"></div>
+    <div class="lock-hint">如忘记密码请联系 IE 管理员</div>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="app-header">
+  <div style="flex:1">
+    <h1>🏭 L4 产能爬坡日报系统</h1>
+    <div class="badge-line">动力电池产线 · X项目</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span style="font-size:12px;opacity:.85">当前日期：</span>
+    <input type="date" id="currentDate" class="date-selector">
+    <button class="btn-today" onclick="goToday()">今天</button>
+    <button class="btn-today" onclick="exportData()" title="导出数据">💾 导出</button>
+    <button class="btn-today" onclick="lockApp()" title="锁定">🔒 锁定</button>
+    <span id="syncBadge" style="font-size:11px;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,.15);cursor:pointer" onclick="openCloudSettings()" title="云端设置">⚙️ 云端</span>
+  </div>
+</div>
+
+<!-- Firebase 配置引导 Modal -->
+<div class="modal fade" id="cloudSetupModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1a3a5c;color:white;">
+        <h5 class="modal-title">☁️ 云端共享配置</h5>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info p-2" style="font-size:12px;">
+          <b>配置一次，所有人共享同一份数据。</b>需要先免费创建 Firebase 项目，获取配置信息后填入下方。
+        </div>
+        <!-- 步骤说明 -->
+        <div class="mb-3">
+          <div class="db-section" style="margin:0 0 8px;">📋 操作步骤（约5分钟）</div>
+          <ol style="font-size:12px;line-height:2;padding-left:18px;">
+            <li>打开 <a href="https://console.firebase.google.com" target="_blank" style="color:#2196F3">console.firebase.google.com</a>，用 Google 账号登录</li>
+            <li>点击「创建项目」→ 输入项目名（如 <b>l4-report</b>）→ 关闭 Google Analytics → 创建</li>
+            <li>进入项目后，左侧菜单点「Firestore Database」→「创建数据库」→ 选「<b>以测试模式启动</b>」→ 选亚洲节点（asia-east1）</li>
+            <li>点左上角「项目概览」旁的齿轮 ⚙️ →「项目设置」→ 下滑找「您的应用」→ 点「&lt;/&gt; 网页」图标 → 注册应用</li>
+            <li>复制 <code>firebaseConfig</code> 里的各个值，填入下方</li>
+          </ol>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">API Key <span class="text-danger">*</span></label>
+            <input type="text" id="fb_apiKey" class="form-control" placeholder="AIzaSy...">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Project ID <span class="text-danger">*</span></label>
+            <input type="text" id="fb_projectId" class="form-control" placeholder="l4-report">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Auth Domain</label>
+            <input type="text" id="fb_authDomain" class="form-control" placeholder="l4-report.firebaseapp.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">App ID</label>
+            <input type="text" id="fb_appId" class="form-control" placeholder="1:123456:web:abc...">
+          </div>
+        </div>
+        <div class="mt-2 p-2 rounded" style="background:#f5f5f5;font-size:11px;color:#555;">
+          💡 <b>不用云端？</b>直接关闭此窗口，数据仅保存在本机浏览器（localStorage），适合单机使用。
+        </div>
+        <hr>
+        <div class="db-section" style="margin:0 0 8px;">🔑 修改访问密码</div>
+        <div class="row g-2">
+          <div class="col-4">
+            <label class="form-label">当前密码</label>
+            <input type="password" id="pwd_old" class="form-control" placeholder="当前密码">
+          </div>
+          <div class="col-4">
+            <label class="form-label">新密码</label>
+            <input type="password" id="pwd_new" class="form-control" placeholder="新密码（≥4位）">
+          </div>
+          <div class="col-4">
+            <label class="form-label">确认新密码</label>
+            <input type="password" id="pwd_confirm" class="form-control" placeholder="再输一次">
+          </div>
+        </div>
+        <button class="btn btn-sm btn-warning mt-2" onclick="changePassword()">🔑 修改密码</button>
+        <div id="pwdChangeResult" class="mt-1" style="font-size:12px;min-height:18px;"></div>
+        <div id="fbTestResult" class="mt-2" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">暂不配置（本机使用）</button>
+        <button class="btn btn-outline-primary" onclick="testFirebase()">🔗 测试连接</button>
+        <button class="btn btn-primary" onclick="saveFirebaseConfig()">✅ 保存并启用云端</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs" id="mainTabs">
+  <li class="nav-item">
+    <button class="nav-link active" onclick="switchTab('tab0',this)">
+      <span class="tab-icon">🎯</span>驾驶舱
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="switchTab('tab1',this)">
+      <span class="tab-icon">📊</span>产能达成 <small class="text-muted ms-1">IE</small>
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="switchTab('tab2',this)">
+      <span class="tab-icon">⚠️</span>故障宕机 <small class="text-muted ms-1">IE/ME</small>
+    </button>
+  </li>
+  <li class="nav-item">
+    <button class="nav-link" onclick="switchTab('tab3',this)">
+      <span class="tab-icon">✅</span>FTY <small class="text-muted ms-1">PE</small>
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+<!-- ==================== TAB 0: 驾驶舱 ==================== -->
+<div id="tab0" class="tab-pane">
+
+  <!-- 顶部KPI行 -->
+  <div class="row g-2 mb-2">
+    <div class="col-6 col-md-2">
+      <div class="kpi-block kpi-prod">
+        <div class="kpi-tag">🏭</div>
+        <div class="kpi-lbl">今日实际产出</div>
+        <div class="kpi-v" id="db_todayActual">-</div>
+        <div class="kpi-sub">计划 <span id="db_todayPlan">-</span> EA</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="kpi-block kpi-ach">
+        <div class="kpi-tag">📈</div>
+        <div class="kpi-lbl">今日达成率</div>
+        <div class="kpi-v" id="db_todayAch">-</div>
+        <div class="kpi-sub">设计产能 <span id="db_designCap">-</span> EA</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="kpi-block kpi-gap">
+        <div class="kpi-tag">📐</div>
+        <div class="kpi-lbl">累计 Gap</div>
+        <div class="kpi-v" id="db_cumGap">-</div>
+        <div class="kpi-sub">累计产出 <span id="db_totalActual">-</span> EA</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="kpi-block kpi-loss">
+        <div class="kpi-tag">⏱️</div>
+        <div class="kpi-lbl">今日LOSS</div>
+        <div class="kpi-v" id="db_todayLoss">-</div>
+        <div class="kpi-sub">宕机 <span id="db_downtimeTotal">-</span> min（累计）</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="kpi-block kpi-fty">
+        <div class="kpi-tag">✅</div>
+        <div class="kpi-lbl">今日 FTY</div>
+        <div class="kpi-v" id="db_todayFty">-</div>
+        <div class="kpi-sub">目标 <span id="db_ftyTarget">-</span></div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="kpi-block kpi-issue">
+        <div class="kpi-tag">🔧</div>
+        <div class="kpi-lbl">进行中问题</div>
+        <div class="kpi-v" id="db_openIssues">-</div>
+        <div class="kpi-sub">ME <span id="db_meOpen">-</span> · FTY <span id="db_ftyOpen">-</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主体区域 -->
+  <div class="row g-2">
+
+    <!-- 左列：产能爬坡曲线 + 达成进度 -->
+    <div class="col-lg-5">
+      <div class="card" style="margin-bottom:10px;">
+        <div class="db-header">
+          <h6>📈 产能爬坡趋势</h6>
+          <button class="db-refresh" onclick="renderDashboard()">↻ 刷新</button>
+        </div>
+        <div class="card-body p-2">
+          <div class="chart-container" style="height:200px;">
+            <canvas id="db_rampChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 爬坡进度环形图 + 节拍进度 -->
+      <div class="row g-2">
+        <div class="col-6">
+          <div class="card h-100">
+            <div class="card-body p-2 text-center">
+              <div style="font-size:12px;font-weight:700;color:#1a3a5c;margin-bottom:4px;">月度爬坡达成</div>
+              <svg width="110" height="110" viewBox="0 0 110 110">
+                <circle cx="55" cy="55" r="46" fill="none" stroke="#eceff1" stroke-width="10"/>
+                <circle id="db_gaugeRing" cx="55" cy="55" r="46" fill="none"
+                  stroke="#2196F3" stroke-width="10" stroke-linecap="round"
+                  stroke-dasharray="289" stroke-dashoffset="289"
+                  transform="rotate(-90 55 55)" class="gauge-ring"/>
+                <text x="55" y="51" text-anchor="middle" font-size="16" font-weight="800" fill="#1a3a5c" id="db_gaugePct">-</text>
+                <text x="55" y="65" text-anchor="middle" font-size="9" fill="#78909c">累计达成率</text>
+              </svg>
+              <div style="font-size:11px;color:#555;margin-top:-4px;">
+                实际 <b id="db_g_actual">-</b> / 计划 <b id="db_g_plan">-</b> EA
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="card h-100">
+            <div class="card-body p-2">
+              <div style="font-size:12px;font-weight:700;color:#1a3a5c;margin-bottom:8px;">节拍优化进度</div>
+              <div id="db_ctProgress" style="font-size:12px;"></div>
+              <div style="font-size:12px;font-weight:700;color:#1a3a5c;margin:10px 0 6px;">FTY 近7日均值</div>
+              <div style="text-align:center;">
+                <span id="db_fty7avg" style="font-size:22px;font-weight:800;color:#2e7d32;">-</span>
+                <span style="font-size:11px;color:#888;"> / 目标 <span id="db_fty7tgt">-</span></span>
+              </div>
+              <div class="progress mt-2" style="height:6px;">
+                <div class="progress-bar bg-success" id="db_ftyBar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 中列：宕机柏拉图 + 故障列表 -->
+    <div class="col-lg-4">
+      <div class="card" style="margin-bottom:10px;">
+        <div class="db-header">
+          <h6>⚠️ 宕机TOP工站（近14天）</h6>
+        </div>
+        <div class="card-body p-2">
+          <div class="chart-container" style="height:200px;">
+            <canvas id="db_downtimeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="db-header">
+          <h6>🔧 ME 进行中问题</h6>
+        </div>
+        <div class="card-body p-2" id="db_meIssuesList" style="max-height:170px;overflow-y:auto;">
+          <div class="no-data">无数据</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右列：FTY趋势 + FTY问题 -->
+    <div class="col-lg-3">
+      <div class="card" style="margin-bottom:10px;">
+        <div class="db-header">
+          <h6>✅ FTY趋势（近14天）</h6>
+        </div>
+        <div class="card-body p-2">
+          <div class="chart-container" style="height:200px;">
+            <canvas id="db_ftyMiniChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="db-header">
+          <h6>📋 FTY Ongoing 问题</h6>
+        </div>
+        <div class="card-body p-2" id="db_ftyIssuesList" style="max-height:170px;overflow-y:auto;">
+          <div class="no-data">无数据</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部：日度燃尽图 -->
+  <div class="card mt-1">
+    <div class="db-header" style="border-radius:10px 10px 0 0;">
+      <h6>🗓️ 全周期每日概览（产出 / 达成率 / FTY / LOSS）</h6>
+      <span class="db-ts" id="db_lastUpdate"></span>
+    </div>
+    <div class="card-body p-2">
+      <div class="chart-container" style="height:160px;">
+        <canvas id="db_overviewChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end tab0 -->
+
+<!-- ==================== TAB 1: 产能达成 ==================== -->
+<div id="tab1" class="tab-pane" style="display:none">
+  <div class="row g-3">
+    <!-- Left: Input + Stats -->
+    <div class="col-lg-4">
+      <!-- Input Card -->
+      <div class="card">
+        <div class="card-header">📝 日报录入</div>
+        <div class="card-body p-3">
+          <div class="mb-3 p-2 rounded" style="background:#e3f2fd;font-size:12px;" id="planInfo">
+            加载中...
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label">实际产出 (EA) <span class="text-danger">*</span></label>
+              <input type="number" id="inp_actual" class="form-control" placeholder="0" min="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label">实际节拍 (s)</label>
+              <input type="number" id="inp_ct" class="form-control" placeholder="354" step="0.1">
+            </div>
+            <div class="col-6">
+              <label class="form-label">实际LOSS (min)</label>
+              <input type="number" id="inp_loss" class="form-control" placeholder="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label">OPS数据 (EA)</label>
+              <input type="number" id="inp_ops" class="form-control" placeholder="0">
+            </div>
+            <div class="col-12">
+              <label class="form-label">备注</label>
+              <input type="text" id="inp_remark" class="form-control" placeholder="当日特殊情况说明">
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary flex-fill" onclick="saveDaily()">💾 保存数据</button>
+            <button class="btn btn-outline-secondary" onclick="clearDailyForm()">清空</button>
+          </div>
+          <div id="saveMsg" style="display:none;margin-top:8px;" class="alert alert-success p-2 text-center" style="font-size:12px;"></div>
+        </div>
+      </div>
+
+      <!-- Summary Stats -->
+      <div class="row g-2" id="summaryStats">
+        <div class="col-6"><div class="stat-card blue"><div class="stat-val" id="stat_actual">-</div><div class="stat-lbl">今日实际 (EA)</div></div></div>
+        <div class="col-6"><div class="stat-card green" id="sc_plan"><div class="stat-val" id="stat_plan">-</div><div class="stat-lbl">今日计划 (EA)</div></div></div>
+        <div class="col-6"><div class="stat-card orange" id="sc_ach"><div class="stat-val" id="stat_ach">-</div><div class="stat-lbl">今日达成率</div></div></div>
+        <div class="col-6"><div class="stat-card purple" id="sc_cumgap"><div class="stat-val" id="stat_cumgap">-</div><div class="stat-lbl">累计 Gap (EA)</div></div></div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="card mt-2">
+        <div class="card-body p-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span style="font-size:12px;font-weight:600;">月度进度</span>
+            <span style="font-size:12px;" id="monthProgress">0/0 EA</span>
+          </div>
+          <div class="progress mb-2">
+            <div class="progress-bar bg-success" id="progressBar" style="width:0%"></div>
+          </div>
+          <div class="d-flex justify-content-between" style="font-size:11px;color:#666;">
+            <span>累计实际: <strong id="totalActual">0</strong></span>
+            <span>累计计划: <strong id="totalPlan">0</strong></span>
+            <span>设计产能: <strong id="totalDesign">0</strong></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Charts -->
+    <div class="col-lg-8">
+      <!-- Production Trend Chart -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>📈 产出趋势（计划 vs 实际）</span>
+          <div>
+            <button class="btn btn-sm btn-outline-light" onclick="setChartRange('all')">全部</button>
+            <button class="btn btn-sm btn-outline-light ms-1" onclick="setChartRange('14')">近14天</button>
+            <button class="btn btn-sm btn-outline-light ms-1" onclick="setChartRange('7')">近7天</button>
+          </div>
+        </div>
+        <div class="card-body p-2">
+          <div class="chart-container" style="height:220px;">
+            <canvas id="productionChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- CT & Loss Chart -->
+      <div class="card">
+        <div class="card-header">⏱️ 节拍 & LOSS 趋势</div>
+        <div class="card-body p-2">
+          <div class="chart-container" style="height:170px;">
+            <canvas id="ctChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Table -->
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>📋 产能达成明细表</span>
+      <span style="font-size:11px;opacity:.8;">点击行可快速填入日期</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="data-table-wrap">
+        <table class="table table-bordered table-hover mb-0" id="productionTable">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>设计产能</th>
+              <th>计划(EA)</th>
+              <th>实际(EA)</th>
+              <th>Daily Gap</th>
+              <th>累计Gap</th>
+              <th>达成率</th>
+              <th>节拍目标</th>
+              <th>实际节拍</th>
+              <th>LOSS(min)</th>
+              <th>OPS</th>
+              <th>备注</th>
+            </tr>
+          </thead>
+          <tbody id="productionTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div><!-- end tab1 -->
+
+<!-- ==================== TAB 2: 故障宕机 ==================== -->
+<div id="tab2" class="tab-pane" style="display:none">
+  <div class="row g-3">
+    <!-- Left: IE Input -->
+    <div class="col-lg-5">
+      <!-- Add Failure -->
+      <div class="card">
+        <div class="card-header">➕ IE：录入故障宕机</div>
+        <div class="card-body p-3">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label">日期</label>
+              <input type="date" id="f_date" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label">工站/设备 <span class="text-danger">*</span></label>
+              <select id="f_station" class="form-select">
+                <option value="">-- 选择工站 --</option>
+                <option>堆叠</option>
+                <option>XY分料</option>
+                <option>CCS安装</option>
+                <option>激光焊</option>
+                <option>上盖安装</option>
+                <option>BSB</option>
+                <option>LWM</option>
+                <option>Block检测</option>
+                <option>Pack表面清洁</option>
+                <option>Beam堆叠分料</option>
+                <option>Beam堆叠布料</option>
+                <option>其他</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">宕机时长 (min) <span class="text-danger">*</span></label>
+              <input type="number" id="f_duration" class="form-control" placeholder="0" min="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label">影响产出 (EA)</label>
+              <input type="number" id="f_output" class="form-control" placeholder="0" min="0">
+            </div>
+            <div class="col-12">
+              <label class="form-label">故障描述</label>
+              <textarea id="f_desc" class="form-control" rows="2" placeholder="描述故障现象..."></textarea>
+            </div>
+          </div>
+          <button class="btn btn-primary mt-2 w-100" onclick="addFailure()">➕ 添加故障记录</button>
+        </div>
+      </div>
+
+      <!-- Failure Records List -->
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>📋 故障记录</span>
+          <div class="d-flex gap-1 align-items-center">
+            <select id="f_filter_period" class="form-select form-select-sm pareto-period" onchange="renderFailures()">
+              <option value="7">近7天</option>
+              <option value="14">近14天</option>
+              <option value="30">近30天</option>
+              <option value="all" selected>全部</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="data-table-wrap" style="max-height:280px;">
+            <table class="table table-bordered mb-0">
+              <thead>
+                <tr>
+                  <th>日期</th><th>工站</th><th>时长(min)</th><th>影响(EA)</th><th>描述</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="failureTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Pareto + ME Top3 -->
+    <div class="col-lg-7">
+      <!-- Pareto Chart -->
+      <div class="card">
+        <div class="card-header">📊 宕机柏拉图（按工站累计时长）</div>
+        <div class="card-body p-2">
+          <div class="chart-container" style="height:240px;">
+            <canvas id="paretoChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ME TOP3 Issue Tracking -->
+      <div class="card">
+        <div class="card-header me-header">🔧 ME：TOP3故障原因措施跟踪</div>
+        <div class="card-body p-2">
+          <div id="top3Container">
+            <!-- Rendered dynamically -->
+          </div>
+          <!-- Add/Edit ME Issue Modal Trigger -->
+          <div class="mt-2">
+            <button class="btn btn-sm btn-outline-danger" onclick="openAddMEIssue()">＋ 添加/编辑专项问题</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Additional ME Issues -->
+  <div class="card">
+    <div class="card-header me-header">📌 ME 专项问题追踪</div>
+    <div class="card-body p-0">
+      <div class="data-table-wrap" style="max-height:280px;">
+        <table class="table table-bordered mb-0">
+          <thead>
+            <tr>
+              <th>工站</th><th>当前状态</th><th>加速措施</th><th>负责人</th><th>计划完成时间</th><th>状态</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="meIssuesTbody"></tbody>
+        </table>
+      </div>
+      <div class="p-2">
+        <button class="btn btn-sm btn-primary" onclick="openAddMEIssue()">➕ 新增问题</button>
+      </div>
+    </div>
+  </div>
+</div><!-- end tab2 -->
+
+<!-- ==================== TAB 3: FTY ==================== -->
+<div id="tab3" class="tab-pane" style="display:none">
+  <div class="row g-3">
+    <!-- Left: FTY Input + Stats -->
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header pe-header">📝 PE：FTY 日报录入</div>
+        <div class="card-body p-3">
+          <div class="mb-2 p-2 rounded" style="background:#e8f5e9;font-size:12px;" id="ftyTargetInfo">
+            加载中...
+          </div>
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label">FTY 实际值 (%)</label>
+              <div class="input-group">
+                <input type="number" id="fty_val" class="form-control" placeholder="85.00" step="0.01" min="0" max="100">
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-success mt-2 w-100" onclick="saveFty()">💾 保存 FTY</button>
+          <div id="ftySaveMsg" style="display:none;" class="alert alert-success p-2 mt-2 text-center"></div>
+        </div>
+      </div>
+
+      <!-- FTY Stats -->
+      <div class="row g-2" id="ftyStats">
+        <div class="col-6"><div class="stat-card green"><div class="stat-val" id="fty_today">-</div><div class="stat-lbl">今日FTY</div></div></div>
+        <div class="col-6"><div class="stat-card blue"><div class="stat-val" id="fty_target">-</div><div class="stat-lbl">今日目标</div></div></div>
+        <div class="col-6"><div class="stat-card teal"><div class="stat-val" id="fty_avg7">-</div><div class="stat-lbl">近7日均值</div></div></div>
+        <div class="col-6"><div class="stat-card purple"><div class="stat-val" id="fty_trend">-</div><div class="stat-lbl">趋势（vs前7日）</div></div></div>
+      </div>
+    </div>
+
+    <!-- Right: FTY Chart -->
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header pe-header d-flex justify-content-between align-items-center">
+          <span>📈 FTY 趋势（实际 vs 目标）</span>
+          <div>
+            <button class="btn btn-sm btn-outline-light" onclick="setFtyRange('all')">全部</button>
+            <button class="btn btn-sm btn-outline-light ms-1" onclick="setFtyRange('14')">近14天</button>
+            <button class="btn btn-sm btn-outline-light ms-1" onclick="setFtyRange('7')">近7天</button>
+          </div>
+        </div>
+        <div class="card-body p-2">
+          <div class="chart-container" style="height:260px;">
+            <canvas id="ftyChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FTY Issue Tracking (PE + ME) -->
+  <div class="row g-3">
+    <!-- Add Issue Form -->
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header pe-header">➕ 添加 FTY 问题</div>
+        <div class="card-body p-3">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label">日期</label>
+              <input type="date" id="fi_date" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label">TOP类型</label>
+              <select id="fi_top" class="form-select">
+                <option value="1">TOP1</option>
+                <option value="2">TOP2</option>
+                <option value="3">TOP3</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">问题类型</label>
+              <select id="fi_type" class="form-select">
+                <option>CCD检测</option>
+                <option>激光焊</option>
+                <option>BSB</option>
+                <option>LWM</option>
+                <option>busbar焊接</option>
+                <option>其他</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">LOSS占比(%)</label>
+              <input type="number" id="fi_loss_pct" class="form-control" placeholder="0" step="0.01">
+            </div>
+            <div class="col-12">
+              <label class="form-label">问题描述</label>
+              <textarea id="fi_desc" class="form-control" rows="2" placeholder="描述问题现象..."></textarea>
+            </div>
+            <div class="col-12">
+              <label class="form-label">根因 & 措施</label>
+              <textarea id="fi_action" class="form-control" rows="2" placeholder="原因分析及改进措施..."></textarea>
+            </div>
+            <div class="col-6">
+              <label class="form-label">负责人</label>
+              <input type="text" id="fi_owner" class="form-control" placeholder="姓名">
+            </div>
+            <div class="col-6">
+              <label class="form-label">计划完成</label>
+              <input type="date" id="fi_due" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label">状态</label>
+              <select id="fi_status" class="form-select">
+                <option>Ongoing</option>
+                <option>Done</option>
+                <option>待处理</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-success mt-2 w-100" onclick="addFtyIssue()">➕ 添加问题</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FTY Issues Table -->
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header pe-header d-flex justify-content-between align-items-center">
+          <span>📋 FTY 问题追踪表</span>
+          <select id="fi_filter" class="form-select form-select-sm pareto-period" onchange="renderFtyIssues()">
+            <option value="all" selected>全部</option>
+            <option value="Ongoing">进行中</option>
+            <option value="Done">已完成</option>
+          </select>
+        </div>
+        <div class="card-body p-0">
+          <div class="data-table-wrap" style="max-height:420px;">
+            <table class="table table-bordered mb-0">
+              <thead>
+                <tr>
+                  <th>日期</th><th>TOP</th><th>类型</th><th>LOSS%</th><th>问题描述</th><th>根因&措施</th><th>负责人</th><th>完成时间</th><th>状态</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="ftyIssuesTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- end tab3 -->
+
+</div><!-- end tab-content -->
+
+<!-- ME Issue Modal -->
+<div class="modal fade" id="meIssueModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">🔧 ME 问题追踪</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label">工站/设备</label>
+            <select id="me_station" class="form-select">
+              <option>堆叠</option><option>XY分料</option><option>CCS安装</option>
+              <option>激光焊</option><option>上盖安装</option><option>BSB</option>
+              <option>LWM</option><option>Block检测</option><option>其他</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label">状态</label>
+            <select id="me_status" class="form-select">
+              <option>Ongoing</option><option>Done</option><option>待处理</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">当前状态描述</label>
+            <textarea id="me_currentState" class="form-control" rows="2" placeholder="描述当前故障状态..."></textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label">加速措施</label>
+            <textarea id="me_action" class="form-control" rows="3" placeholder="具体改进措施..."></textarea>
+          </div>
+          <div class="col-6">
+            <label class="form-label">负责人</label>
+            <input type="text" id="me_owner" class="form-control" placeholder="负责人姓名">
+          </div>
+          <div class="col-6">
+            <label class="form-label">计划完成时间</label>
+            <input type="date" id="me_dueDate" class="form-control">
+          </div>
+        </div>
+        <input type="hidden" id="me_editId">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-danger" onclick="saveMEIssue()">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ==================== CONSTANTS ====================
+const DATES_HIST = [
+  '2026-03-20','2026-03-21','2026-03-22','2026-03-23','2026-03-24','2026-03-25','2026-03-26',
+  '2026-03-27','2026-03-28','2026-03-29','2026-03-30','2026-03-31',
+  '2026-04-01',
+  '2026-04-02','2026-04-03','2026-04-04','2026-04-05','2026-04-06','2026-04-07','2026-04-08',
+  '2026-04-09','2026-04-10','2026-04-11','2026-04-12',
+  '2026-04-13',
+  '2026-04-14','2026-04-15','2026-04-16','2026-04-17','2026-04-18','2026-04-19','2026-04-20','2026-04-21',
+  '2026-04-22','2026-04-23','2026-04-24','2026-04-25','2026-04-26','2026-04-27','2026-04-28','2026-04-29','2026-04-30'
+];
+const PM_DAYS = new Set(['2026-04-01','2026-04-13']);
+
+// Plan schedule
+const PLAN_MAP = {
+  '2026-03-20':43,'2026-03-21':46,'2026-03-22':46,'2026-03-23':50,'2026-03-24':50,'2026-03-25':60,'2026-03-26':60,
+  '2026-03-27':60,'2026-03-28':65,'2026-03-29':70,'2026-03-30':65,'2026-03-31':65,
+  '2026-04-01':'PM',
+  '2026-04-02':80,'2026-04-03':80,'2026-04-04':90,'2026-04-05':90,'2026-04-06':100,'2026-04-07':100,'2026-04-08':110,
+  '2026-04-09':110,'2026-04-10':120,'2026-04-11':120,'2026-04-12':125,
+  '2026-04-13':'PM',
+  '2026-04-14':100,'2026-04-15':130,'2026-04-16':130,'2026-04-17':140,'2026-04-18':140,'2026-04-19':145,'2026-04-20':145,'2026-04-21':155,
+  '2026-04-22':155,'2026-04-23':160,'2026-04-24':167,'2026-04-25':167,'2026-04-26':167,'2026-04-27':167,'2026-04-28':167,'2026-04-29':167,'2026-04-30':167
+};
+const DESIGN_CAP = (d) => d < '2026-03-27' ? 84 : 167;
+const CT_TARGET_MAP = {
+  '2026-03-20':1090,'2026-03-21':1090,'2026-03-22':1090,'2026-03-23':920,'2026-03-24':920,'2026-03-25':920,'2026-03-26':870,
+  '2026-03-27':870,'2026-03-28':790,'2026-03-29':790,'2026-03-30':687,'2026-03-31':687,
+  '2026-04-01':null,'2026-04-02':600,'2026-04-03':600,'2026-04-04':600,'2026-04-05':600,'2026-04-06':475,'2026-04-07':475,'2026-04-08':475,
+  '2026-04-09':395,'2026-04-10':395,'2026-04-11':395,'2026-04-12':395,
+  '2026-04-13':null,'2026-04-14':365,'2026-04-15':365,'2026-04-16':365,'2026-04-17':365,'2026-04-18':365,'2026-04-19':365,'2026-04-20':365,'2026-04-21':365,
+  '2026-04-22':355,'2026-04-23':355,'2026-04-24':355,'2026-04-25':355,'2026-04-26':355,'2026-04-27':355,'2026-04-28':355,'2026-04-29':355,'2026-04-30':355
+};
+const FTY_TARGET_MAP = {
+  '2026-03-20':80,'2026-03-21':80,'2026-03-22':80,'2026-03-23':80,'2026-03-24':80,
+  '2026-03-25':83,'2026-03-26':83,'2026-03-27':83,'2026-03-28':83,'2026-03-29':83,
+  '2026-03-30':85,'2026-03-31':85,'2026-04-01':85,'2026-04-02':85,
+  '2026-04-03':88,'2026-04-04':88,'2026-04-05':88,'2026-04-06':88,'2026-04-07':88,
+  '2026-04-08':90,'2026-04-09':90,'2026-04-10':90,
+  '2026-04-11':93,'2026-04-12':93,'2026-04-13':93,'2026-04-14':93,'2026-04-15':93,
+  '2026-04-16':93,'2026-04-17':93,'2026-04-18':93,'2026-04-19':93,'2026-04-20':93,
+  '2026-04-21':93,'2026-04-22':93,'2026-04-23':95,'2026-04-24':95,'2026-04-25':95,
+  '2026-04-26':95,'2026-04-27':95,'2026-04-28':95,'2026-04-29':95,'2026-04-30':95
+};
+
+// Historical production actuals (seed data)
+const HIST_ACTUAL = {
+  '2026-03-20':25,'2026-03-21':22,'2026-03-22':22,'2026-03-23':23,'2026-03-24':27,'2026-03-25':57,'2026-03-26':54,
+  '2026-03-27':37,'2026-03-28':41,'2026-03-29':51,'2026-03-30':65,'2026-03-31':45,
+  '2026-04-01':7,
+  '2026-04-02':50,'2026-04-03':48,'2026-04-04':74,'2026-04-05':81,'2026-04-06':88,'2026-04-07':72,'2026-04-08':100,
+  '2026-04-09':91,'2026-04-10':110,'2026-04-11':113,'2026-04-12':110,
+  '2026-04-13':0,
+  '2026-04-14':101,'2026-04-15':130,'2026-04-16':106,'2026-04-17':121,'2026-04-18':96,'2026-04-19':133,'2026-04-20':140,'2026-04-21':125
+};
+const HIST_CT = {
+  '2026-03-20':1090,'2026-03-21':1090,'2026-03-22':1090,'2026-03-23':920,'2026-03-24':920,'2026-03-25':920,'2026-03-26':870,
+  '2026-03-27':870,'2026-03-28':790,'2026-03-29':790,'2026-03-30':687,'2026-03-31':687,
+  '2026-04-02':600,'2026-04-03':600,'2026-04-04':600,'2026-04-05':550,'2026-04-06':473,'2026-04-07':473,'2026-04-08':473,
+  '2026-04-09':395,'2026-04-10':390,'2026-04-11':390,'2026-04-12':375,
+  '2026-04-14':370,'2026-04-15':364.7,'2026-04-16':354,'2026-04-17':354,'2026-04-18':354,'2026-04-19':354,'2026-04-20':354,'2026-04-21':354
+};
+const HIST_LOSS = {
+  '2026-03-20':730,'2026-03-21':722,'2026-03-22':713,'2026-03-23':678,'2026-03-24':652,'2026-03-25':635,'2026-03-26':615,
+  '2026-03-27':603,'2026-03-28':586,'2026-03-29':520,'2026-03-30':615,'2026-03-31':540,
+  '2026-04-02':570,'2026-04-03':720,'2026-04-04':497,'2026-04-05':425,'2026-04-06':376,'2026-04-07':420,'2026-04-08':450,
+  '2026-04-09':475,'2026-04-10':317,'2026-04-11':397,'2026-04-12':244,
+  '2026-04-14':334,'2026-04-15':255,'2026-04-16':550,'2026-04-17':550,'2026-04-18':670,'2026-04-19':371,'2026-04-20':450,'2026-04-21':337
+};
+const HIST_FTY = {
+  '2026-03-20':48.74,'2026-03-21':60.21,'2026-03-22':65.61,'2026-03-23':63.62,'2026-03-24':70.81,'2026-03-25':75.55,'2026-03-26':71.81,
+  '2026-03-27':73.65,'2026-03-28':77.92,'2026-03-29':78.24,'2026-03-30':78.72,'2026-03-31':77.51,
+  '2026-04-01':59.81,
+  '2026-04-02':76.89,'2026-04-03':79.09,'2026-04-04':79.59,'2026-04-05':82.11,'2026-04-06':80.26,'2026-04-07':85.31,'2026-04-08':81,
+  '2026-04-09':82,'2026-04-10':85,'2026-04-11':86,'2026-04-12':84,
+  '2026-04-13':84,
+  '2026-04-14':85,'2026-04-15':86,'2026-04-16':88,'2026-04-17':92,'2026-04-18':92,'2026-04-19':91,'2026-04-20':92,'2026-04-21':93
+};
+
+// ==================== PASSWORD PROTECTION ====================
+const DEFAULT_PASSWORD = 'L4@2026';   // ← 默认密码，可通过设置页修改
+const SESSION_HOURS = 8;              // 解锁后多少小时内免密
+
+function hashStr(s) {
+  // Simple hash (djb2) — not cryptographic but sufficient for access control
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h) ^ s.charCodeAt(i);
+  return (h >>> 0).toString(16);
+}
+function getSavedHash() {
+  return localStorage.getItem('l4_pwd_hash') || hashStr(DEFAULT_PASSWORD);
+}
+function isSessionValid() {
+  const ts = parseInt(localStorage.getItem('l4_session_ts') || '0');
+  return Date.now() - ts < SESSION_HOURS * 3600 * 1000;
+}
+function doUnlock() {
+  const input = document.getElementById('lockInput').value;
+  if (!input) { document.getElementById('lockError').textContent = '请输入密码'; return; }
+  if (hashStr(input) === getSavedHash()) {
+    localStorage.setItem('l4_session_ts', Date.now().toString());
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('lockInput').value = '';
+    document.getElementById('lockError').textContent = '';
+  } else {
+    document.getElementById('lockError').textContent = '密码错误，请重试';
+    document.getElementById('lockInput').value = '';
+    document.getElementById('lockInput').focus();
+  }
+}
+function lockApp() {
+  localStorage.removeItem('l4_session_ts');
+  document.getElementById('lockInput').value = '';
+  document.getElementById('lockError').textContent = '';
+  document.getElementById('lockScreen').style.display = 'flex';
+  document.getElementById('lockInput').focus();
+}
+function changePassword() {
+  const oldVal = document.getElementById('pwd_old').value;
+  const newVal = document.getElementById('pwd_new').value;
+  const confirm = document.getElementById('pwd_confirm').value;
+  const res = document.getElementById('pwdChangeResult');
+  if (hashStr(oldVal) !== getSavedHash()) {
+    res.innerHTML = '<span style="color:red">❌ 当前密码错误</span>'; return;
+  }
+  if (newVal.length < 4) {
+    res.innerHTML = '<span style="color:red">❌ 新密码至少4位</span>'; return;
+  }
+  if (newVal !== confirm) {
+    res.innerHTML = '<span style="color:red">❌ 两次密码不一致</span>'; return;
+  }
+  localStorage.setItem('l4_pwd_hash', hashStr(newVal));
+  localStorage.setItem('l4_session_ts', Date.now().toString());
+  ['pwd_old','pwd_new','pwd_confirm'].forEach(id => document.getElementById(id).value = '');
+  res.innerHTML = '<span style="color:green">✅ 密码已修改，下次登录生效</span>';
+}
+
+// ==================== DATA MANAGEMENT (Firebase + localStorage) ====================
+let _db = null;          // Firestore instance
+let _unsubscribe = null; // Real-time listener unsubscribe
+let _isSaving = false;   // Prevent echo from own saves
+let _saveTimer = null;   // Debounce timer
+
+function loadData() {
+  try { return JSON.parse(localStorage.getItem('l4_report') || 'null') || {}; }
+  catch(e) { return {}; }
+}
+function saveLocal(data) {
+  localStorage.setItem('l4_report', JSON.stringify(data));
+}
+function getData() { return window._appData || (window._appData = loadData()); }
+
+// Debounced persist: saves to localStorage immediately, Firebase with 800ms debounce
+function persistData() {
+  const data = getData();
+  saveLocal(data);
+  if (_db) {
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => pushToFirestore(data), 800);
+  }
+}
+
+async function pushToFirestore(data) {
+  if (!_db) return;
+  _isSaving = true;
+  setSyncBadge('🔄 同步中…', '#FF9800');
+  try {
+    await _db.collection('l4').doc('reportData').set(data);
+    setSyncBadge('☁️ 已同步', '#4CAF50');
+  } catch(e) {
+    setSyncBadge('❌ 同步失败', '#f44336');
+    console.error('Firestore save error:', e);
+  } finally {
+    setTimeout(() => { _isSaving = false; }, 300);
+  }
+}
+
+function setSyncBadge(text, color) {
+  const el = document.getElementById('syncBadge');
+  if (!el) return;
+  el.textContent = text;
+  el.style.background = color + '33';
+  el.style.color = color === '#4CAF50' ? '#2e7d32' : (color === '#f44336' ? '#c62828' : '#e65100');
+}
+
+// ---- Firebase init ----
+function getFirebaseConfig() {
+  try { return JSON.parse(localStorage.getItem('l4_firebase') || 'null'); }
+  catch(e) { return null; }
+}
+function saveFirebaseConfigLocal(cfg) {
+  localStorage.setItem('l4_firebase', JSON.stringify(cfg));
+}
+
+function initFirebase(cfg) {
+  if (!cfg || !cfg.apiKey || !cfg.projectId) return false;
+  try {
+    // Avoid re-init on hot reload
+    if (!firebase.apps.length) {
+      firebase.initializeApp(cfg);
+    }
+    _db = firebase.firestore();
+    startRealtimeSync();
+    setSyncBadge('☁️ 云端已连接', '#4CAF50');
+    return true;
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    setSyncBadge('❌ Firebase错误', '#f44336');
+    return false;
+  }
+}
+
+function startRealtimeSync() {
+  if (_unsubscribe) _unsubscribe();
+  _unsubscribe = _db.collection('l4').doc('reportData').onSnapshot(snap => {
+    if (!snap.exists) return;
+    if (_isSaving) return; // skip echo from own write
+    const remote = snap.data();
+    if (remote && Object.keys(remote).length > 0) {
+      window._appData = remote;
+      saveLocal(remote);
+      renderAll();
+      setSyncBadge('☁️ 已同步', '#4CAF50');
+    }
+  }, err => {
+    setSyncBadge('❌ 同步中断', '#f44336');
+    console.error('Snapshot error:', err);
+  });
+}
+
+// Pull once from Firestore on startup
+async function pullFromFirestore() {
+  if (!_db) return;
+  setSyncBadge('🔄 加载云端…', '#FF9800');
+  try {
+    const snap = await _db.collection('l4').doc('reportData').get();
+    if (snap.exists) {
+      const remote = snap.data();
+      window._appData = remote;
+      saveLocal(remote);
+      setSyncBadge('☁️ 云端已加载', '#4CAF50');
+    } else {
+      // First time: push local data to cloud
+      await pushToFirestore(getData());
+    }
+  } catch(e) {
+    setSyncBadge('❌ 加载失败', '#f44336');
+    console.error('Pull error:', e);
+  }
+}
+
+// ---- Config modal ----
+function openCloudSettings() {
+  const cfg = getFirebaseConfig() || {};
+  document.getElementById('fb_apiKey').value = cfg.apiKey || '';
+  document.getElementById('fb_projectId').value = cfg.projectId || '';
+  document.getElementById('fb_authDomain').value = cfg.authDomain || '';
+  document.getElementById('fb_appId').value = cfg.appId || '';
+  document.getElementById('fbTestResult').style.display = 'none';
+  new bootstrap.Modal(document.getElementById('cloudSetupModal')).show();
+}
+
+function getFormConfig() {
+  return {
+    apiKey:      document.getElementById('fb_apiKey').value.trim(),
+    authDomain:  document.getElementById('fb_authDomain').value.trim() ||
+                 document.getElementById('fb_projectId').value.trim() + '.firebaseapp.com',
+    projectId:   document.getElementById('fb_projectId').value.trim(),
+    storageBucket: document.getElementById('fb_projectId').value.trim() + '.appspot.com',
+    appId:       document.getElementById('fb_appId').value.trim(),
+  };
+}
+
+async function testFirebase() {
+  const cfg = getFormConfig();
+  if (!cfg.apiKey || !cfg.projectId) {
+    showFbResult('❌ 请至少填写 API Key 和 Project ID', false); return;
+  }
+  showFbResult('🔄 连接测试中…', null);
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    else firebase.app(); // already init
+    const testDb = firebase.firestore();
+    await testDb.collection('l4').doc('reportData').get();
+    showFbResult('✅ 连接成功！Firestore 可正常读写', true);
+  } catch(e) {
+    showFbResult('❌ 连接失败：' + e.message, false);
+  }
+}
+
+function showFbResult(msg, ok) {
+  const el = document.getElementById('fbTestResult');
+  el.style.display = 'block';
+  el.className = 'alert p-2 mt-2 ' + (ok === true ? 'alert-success' : ok === false ? 'alert-danger' : 'alert-warning');
+  el.textContent = msg;
+}
+
+async function saveFirebaseConfig() {
+  const cfg = getFormConfig();
+  if (!cfg.apiKey || !cfg.projectId) { alert('请至少填写 API Key 和 Project ID'); return; }
+  saveFirebaseConfigLocal(cfg);
+  const ok = initFirebase(cfg);
+  if (ok) {
+    await pullFromFirestore();
+    bootstrap.Modal.getInstance(document.getElementById('cloudSetupModal')).hide();
+    renderAll();
+    alert('✅ 云端配置成功！数据将实时同步到所有用户。');
+  } else {
+    showFbResult('❌ Firebase 初始化失败，请检查配置', false);
+  }
+}
+
+// ---- renderAll: refresh all visible content ----
+function renderAll() {
+  updatePlanInfo();
+  updateFtyTargetInfo();
+  loadDailyForm();
+  updateProductionSummary();
+  // Only re-render charts for visible tab
+  if (document.getElementById('tab0').style.display !== 'none') {
+    renderDashboard();
+  } else if (document.getElementById('tab1').style.display !== 'none') {
+    renderProductionTable();
+    updateProductionChart();
+    updateCtChart();
+  } else if (document.getElementById('tab2').style.display !== 'none') {
+    renderFailures();
+  } else if (document.getElementById('tab3').style.display !== 'none') {
+    updateFtyChart();
+    renderFtyIssues();
+    updateFtySummary();
+  }
+}
+
+function initDefaultData() {
+  const d = getData();
+  // Seed daily data from historical if not present
+  if (!d.daily) {
+    d.daily = {};
+    Object.keys(HIST_ACTUAL).forEach(date => {
+      d.daily[date] = {
+        actual: HIST_ACTUAL[date],
+        ct: HIST_CT[date] || null,
+        loss: HIST_LOSS[date] || null,
+        fty: HIST_FTY[date] || null,
+        ops: null, remark: ''
+      };
+    });
+  }
+  // Seed failures
+  if (!d.failures) {
+    d.failures = [
+      {id:'f1',date:'2026-04-09',station:'堆叠',duration:240,output:4,desc:'堆叠层与下层碰撞弹起'},
+      {id:'f2',date:'2026-04-09',station:'XY分料',duration:150,output:6,desc:'偏移导致分料NG'},
+      {id:'f3',date:'2026-04-13',station:'CCS安装',duration:550,output:0,desc:'CCS支撑架螺丝孔与夹具干涉，寻址前4/7夜班已验证回弹100s'},
+      {id:'f4',date:'2026-04-13',station:'上盖安装',duration:500,output:0,desc:'上盖定位偏移，手动辅助'},
+      {id:'f5',date:'2026-04-15',station:'堆叠',duration:120,output:0,desc:'堆叠设备异常'},
+      {id:'f6',date:'2026-04-16',station:'Beam堆叠分料',duration:48,output:0,desc:'涂胶设备异常'},
+      {id:'f7',date:'2026-04-16',station:'Beam堆叠分料',duration:29,output:0,desc:'涂胶异常'},
+      {id:'f8',date:'2026-04-17',station:'堆叠',duration:90,output:3,desc:'堆叠层间碰撞'},
+      {id:'f9',date:'2026-04-18',station:'激光焊',duration:120,output:5,desc:'激光焊NG导致停线'},
+      {id:'f10',date:'2026-04-19',station:'XY分料',duration:60,output:2,desc:'XY分料偏移'},
+      {id:'f11',date:'2026-04-20',station:'堆叠',duration:80,output:3,desc:'堆叠机构故障'},
+      {id:'f12',date:'2026-04-21',station:'激光焊',duration:100,output:4,desc:'焊缝缺陷'},
+    ];
+  }
+  // Seed ME issues
+  if (!d.meIssues) {
+    d.meIssues = [
+      {id:'me1',station:'堆叠',currentState:'堆叠CT 395s，本体控制速度优化(125mm/s→150mm/s 节省19.8S)，排料放架结构优化(500ms→200ms 9.3S)，beam定位无极限限位需固定堆叠入口 10.9S',action:'ME负责：1.实时调每层位置，消除偏移减半节距; 2.4/14PM调整完成后继续优化',owner:'ME负责',dueDate:'2026-04-26',status:'Ongoing'},
+      {id:'me2',station:'XY分料',currentState:'XY分料偏移导致取料NG，一直需要人工干预，预防已增加经路PLC控制人工',action:'ME负责：1.实时更换执行驱动预防; 2.在大措施调整压高度、初始速度、保持稳定性',owner:'ME负责',dueDate:'2026-04-22',status:'Ongoing'},
+    ];
+  }
+  // Seed FTY issues
+  if (!d.ftyIssues) {
+    d.ftyIssues = [
+      {id:'fi1',date:'2026-04-21',top:1,type:'激光焊',lossPct:5.62,desc:'激光焊平整度超差',action:'设备清水管/冷凝管路整理清洗确认; 水冷管防松动螺钉紧固-措施固化; 水冷管路与激光头同步液位差不到位-措施100%显示刻度位置 ME在防4/8 Done',owner:'PE负责',dueDate:'2026-04-08',status:'Done'},
+      {id:'fi2',date:'2026-04-21',top:2,type:'CCD检测',lossPct:4.41,desc:'对齐CCD拍NG',action:'原因1：偶发2D图像异常，原因视觉算法通过置信度和差异判定不定位，各轴可能异常; 原因2：偶发CCD图片拍图异常，原因反光和噪声导致取图和信号丢失，各帧图像异常; 1.增加反馈状态感知; 2.软件应稳固化版本固化',owner:'PE负责',dueDate:'2026-04-31',status:'Ongoing'},
+      {id:'fi3',date:'2026-04-21',top:3,type:'busbar焊接',lossPct:2.41,desc:'busbar焊接不到位',action:'原因：部件空缺铜排位置不到位有内层倒扣，方向确认为安铜排时铜排位置高度被压导; 措施：临时时安装防呆卡扣，支撑铜排占位并恢复内层倒扣',owner:'PE负责',dueDate:'2026-04-25',status:'Ongoing'},
+      {id:'fi4',date:'2026-04-22',top:1,type:'CCD检测',lossPct:null,desc:'水冷管间隙过大导致NG 3EA；CCD扫描范围不够，未能抓取水冷管间隙\n焊缝1EA CCD扫描中焊缝异常999图，1EA黑斑，将累计导入拍照',action:'1.CCD优化视觉扫描范围---ME\n2.预采集焊缝胶片的位置特殊---PE',owner:'PE负责\nPE负责',dueDate:'2026-04-32',status:'Ongoing',remark:'间隙CCD判断NC确认'},
+    ];
+  }
+  persistData();
+}
+
+// ==================== DATE MANAGEMENT ====================
+let selectedDate = '';
+let chartRange = 'all';
+let ftyRange = 'all';
+
+function getCurrentDate() { return selectedDate; }
+function todayStr() { return new Date().toISOString().slice(0,10); }
+
+function goToday() {
+  const today = todayStr();
+  selectedDate = today;
+  document.getElementById('currentDate').value = today;
+  onDateChange();
+}
+
+function onDateChange() {
+  selectedDate = document.getElementById('currentDate').value;
+  loadDailyForm();
+  updateProductionSummary();
+  renderProductionTable();
+  updateFtySummary();
+  document.getElementById('f_date').value = selectedDate;
+  document.getElementById('fi_date').value = selectedDate;
+  updatePlanInfo();
+  updateFtyTargetInfo();
+  // Refresh dashboard if visible
+  if (document.getElementById('tab0').style.display !== 'none') {
+    setTimeout(() => renderDashboard(), 50);
+  }
+}
+
+function updatePlanInfo() {
+  const d = selectedDate;
+  const plan = PLAN_MAP[d];
+  const ctT = CT_TARGET_MAP[d];
+  const dc = DESIGN_CAP(d);
+  const el = document.getElementById('planInfo');
+  if (!d) { el.innerHTML = '请选择日期'; return; }
+  const isPM = PM_DAYS.has(d);
+  if (isPM) {
+    el.innerHTML = `<b>📅 ${d}</b> &nbsp; <span class="badge badge-pm badge-status">PM维护日</span>`;
+  } else {
+    el.innerHTML = `<b>📅 ${d}</b> &nbsp; 设计产能 <b>${dc}</b> EA &nbsp; 计划 <b>${plan||'-'}</b> EA &nbsp; 节拍目标 <b>${ctT||'-'}</b>s`;
+  }
+}
+
+function updateFtyTargetInfo() {
+  const d = selectedDate;
+  const t = FTY_TARGET_MAP[d];
+  const el = document.getElementById('ftyTargetInfo');
+  if (!d) { el.innerHTML = '请选择日期'; return; }
+  el.innerHTML = `<b>📅 ${d}</b> &nbsp; FTY目标 <b>${t||'-'}%</b>`;
+}
+
+// ==================== PRODUCTION TAB ====================
+function loadDailyForm() {
+  const d = getData().daily || {};
+  const rec = d[selectedDate] || {};
+  document.getElementById('inp_actual').value = rec.actual != null ? rec.actual : '';
+  document.getElementById('inp_ct').value = rec.ct != null ? rec.ct : '';
+  document.getElementById('inp_loss').value = rec.loss != null ? rec.loss : '';
+  document.getElementById('inp_ops').value = rec.ops != null ? rec.ops : '';
+  document.getElementById('inp_remark').value = rec.remark || '';
+}
+
+function clearDailyForm() {
+  ['inp_actual','inp_ct','inp_loss','inp_ops','inp_remark'].forEach(id => document.getElementById(id).value = '');
+}
+
+function saveDaily() {
+  const actual = parseFloat(document.getElementById('inp_actual').value);
+  const ct = parseFloat(document.getElementById('inp_ct').value) || null;
+  const loss = parseFloat(document.getElementById('inp_loss').value) || null;
+  const ops = parseFloat(document.getElementById('inp_ops').value) || null;
+  const remark = document.getElementById('inp_remark').value;
+
+  if (isNaN(actual)) { alert('请输入实际产出数量'); return; }
+  const d = getData();
+  if (!d.daily) d.daily = {};
+  d.daily[selectedDate] = { actual, ct, loss, ops, remark,
+    fty: d.daily[selectedDate] ? d.daily[selectedDate].fty : null };
+  persistData();
+
+  const msg = document.getElementById('saveMsg');
+  msg.textContent = `✅ ${selectedDate} 数据已保存 (实际产出: ${actual} EA)`;
+  msg.style.display = 'block';
+  setTimeout(() => { msg.style.display = 'none'; }, 3000);
+
+  updateProductionSummary();
+  renderProductionTable();
+  updateProductionChart();
+  updateCtChart();
+}
+
+function getEffectiveDates() {
+  // All dates up to today or the last available date
+  const today = todayStr();
+  return DATES_HIST.filter(d => d <= today || getData().daily?.[d]?.actual != null);
+}
+
+function updateProductionSummary() {
+  const d = getData().daily || {};
+  const date = selectedDate;
+  const plan = PLAN_MAP[date];
+  const actual = d[date]?.actual;
+  const isPM = PM_DAYS.has(date);
+
+  // Today stats
+  document.getElementById('stat_actual').textContent = actual != null ? actual : '-';
+  document.getElementById('stat_plan').textContent = isPM ? 'PM' : (plan != null ? plan : '-');
+
+  if (!isPM && plan != null && actual != null) {
+    const ach = (actual / plan * 100).toFixed(1);
+    document.getElementById('stat_ach').textContent = ach + '%';
+    document.getElementById('sc_ach').className = 'stat-card ' + (actual >= plan ? 'green' : 'orange');
+  } else {
+    document.getElementById('stat_ach').textContent = isPM ? 'PM' : '-';
+  }
+
+  // Cumulative gap
+  let cumGap = 0, totalActual = 0, totalPlan = 0, totalDesign = 0;
+  const allDates = getEffectiveDates();
+  for (const dt of allDates) {
+    if (dt > date) break;
+    const p = PLAN_MAP[dt];
+    const a = d[dt]?.actual;
+    if (!PM_DAYS.has(dt) && typeof p === 'number' && a != null) {
+      cumGap += a - p;
+      totalActual += a;
+      totalPlan += p;
+    }
+    if (!PM_DAYS.has(dt)) totalDesign += DESIGN_CAP(dt);
+  }
+  document.getElementById('stat_cumgap').textContent = (cumGap >= 0 ? '+' : '') + cumGap;
+  document.getElementById('sc_cumgap').className = 'stat-card ' + (cumGap >= 0 ? 'green' : 'red');
+
+  document.getElementById('totalActual').textContent = totalActual;
+  document.getElementById('totalPlan').textContent = totalPlan;
+  document.getElementById('totalDesign').textContent = totalDesign;
+
+  const pct = totalPlan > 0 ? Math.min(100, (totalActual/totalPlan*100)).toFixed(1) : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('monthProgress').textContent = `${totalActual}/${totalPlan} EA (${pct}%)`;
+}
+
+function renderProductionTable() {
+  const d = getData().daily || {};
+  const today = todayStr();
+  let cumGap = 0;
+  const rows = [];
+
+  for (const date of DATES_HIST) {
+    const plan = PLAN_MAP[date];
+    const rec = d[date] || {};
+    const actual = rec.actual;
+    const isPM = PM_DAYS.has(date);
+
+    let dailyGap = null;
+    if (!isPM && typeof plan === 'number' && actual != null) {
+      dailyGap = actual - plan;
+      cumGap += dailyGap;
+    }
+
+    const ach = !isPM && typeof plan === 'number' && plan > 0 && actual != null
+      ? (actual / plan * 100).toFixed(1) + '%' : '';
+    const achClass = actual >= plan ? 'achievement-good' : 'achievement-bad';
+
+    let trClass = '';
+    if (date === selectedDate) trClass = 'today-row';
+    else if (isPM) trClass = 'pm-row';
+
+    rows.push(`<tr class="${trClass}" onclick="selectDateFromTable('${date}')" style="cursor:pointer">
+      <td>${date.slice(5).replace('-','/')}</td>
+      <td>${DESIGN_CAP(date)}</td>
+      <td>${isPM ? '<span class="badge badge-pm badge-status">PM</span>' : (plan||'-')}</td>
+      <td>${actual != null ? actual : '<span style="color:#ccc">-</span>'}</td>
+      <td>${dailyGap != null ? `<span class="${dailyGap>=0?'gap-pos':'gap-neg'}">${dailyGap>=0?'+':''}${dailyGap}</span>` : ''}</td>
+      <td>${cumGap != 0 ? `<span class="${cumGap>=0?'gap-pos':'gap-neg'}">${cumGap>=0?'+':''}${cumGap}</span>` : (actual!=null?'0':'')}</td>
+      <td class="${achClass}">${ach}</td>
+      <td>${CT_TARGET_MAP[date]||''}</td>
+      <td>${rec.ct||''}</td>
+      <td>${rec.loss||''}</td>
+      <td>${rec.ops||''}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${rec.remark||''}">${rec.remark||''}</td>
+    </tr>`);
+  }
+  document.getElementById('productionTbody').innerHTML = rows.join('');
+
+  // Scroll to selected date
+  setTimeout(() => {
+    const el = document.querySelector('.today-row');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 100);
+}
+
+function selectDateFromTable(date) {
+  selectedDate = date;
+  document.getElementById('currentDate').value = date;
+  onDateChange();
+}
+
+// ==================== CHARTS ====================
+let prodChart = null, ctChart = null, paretoChart = null, ftyChart = null;
+
+function setChartRange(r) { chartRange = r; updateProductionChart(); }
+function setFtyRange(r) { ftyRange = r; updateFtyChart(); }
+
+function getChartDates(range) {
+  const d = getData().daily || {};
+  let dates = DATES_HIST.filter(dt => d[dt]?.actual != null || PLAN_MAP[dt]);
+  if (range === '7') dates = dates.slice(-7);
+  else if (range === '14') dates = dates.slice(-14);
+  return dates;
+}
+
+function updateProductionChart() {
+  const d = getData().daily || {};
+  const dates = getChartDates(chartRange);
+  const labels = dates.map(dt => dt.slice(5).replace('-','/'));
+  const planData = dates.map(dt => PM_DAYS.has(dt) ? null : (typeof PLAN_MAP[dt]==='number' ? PLAN_MAP[dt] : null));
+  const actualData = dates.map(dt => d[dt]?.actual != null ? d[dt].actual : null);
+
+  const ctx = document.getElementById('productionChart').getContext('2d');
+  if (prodChart) prodChart.destroy();
+  prodChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '计划(EA)', data: planData, type: 'line',
+          borderColor: '#2196F3', backgroundColor: 'rgba(33,150,243,.1)',
+          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3, order: 1 },
+        { label: '实际(EA)', data: actualData,
+          backgroundColor: dates.map((dt,i) => {
+            const a = actualData[i], p = planData[i];
+            if (a == null) return 'rgba(200,200,200,.4)';
+            return a >= p ? 'rgba(76,175,80,.75)' : 'rgba(244,67,54,.75)';
+          }),
+          borderRadius: 3, order: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 } } },
+        tooltip: { mode: 'index', intersect: false,
+          callbacks: {
+            afterBody: (items) => {
+              const i = items[0].dataIndex;
+              const a = actualData[i], p = planData[i];
+              if (a != null && p != null) {
+                const gap = a - p;
+                return [`达成率: ${(a/p*100).toFixed(1)}%`, `Gap: ${gap>=0?'+':''}${gap}`];
+              }
+              return [];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
+        y: { ticks: { font: { size: 10 } }, beginAtZero: true,
+          title: { display: true, text: 'EA', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+function updateCtChart() {
+  const d = getData().daily || {};
+  const dates = getChartDates(chartRange).filter(dt => !PM_DAYS.has(dt));
+  const labels = dates.map(dt => dt.slice(5).replace('-','/'));
+  const ctTargetData = dates.map(dt => CT_TARGET_MAP[dt]);
+  const ctActualData = dates.map(dt => d[dt]?.ct || null);
+  const lossData = dates.map(dt => d[dt]?.loss || null);
+
+  const ctx = document.getElementById('ctChart').getContext('2d');
+  if (ctChart) ctChart.destroy();
+  ctChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: '节拍目标(s)', data: ctTargetData,
+          borderColor: '#FF9800', backgroundColor: 'rgba(255,152,0,.1)',
+          borderWidth: 2, pointRadius: 2, fill: false, tension: 0.3 },
+        { label: '实际节拍(s)', data: ctActualData,
+          borderColor: '#2196F3', backgroundColor: 'rgba(33,150,243,.1)',
+          borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3 },
+        { label: 'LOSS(min)', data: lossData,
+          borderColor: '#f44336', backgroundColor: 'rgba(244,67,54,.1)',
+          borderWidth: 1.5, pointRadius: 2, fill: false, tension: 0.3, borderDash: [4,2],
+          yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 } } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
+        y: { ticks: { font: { size: 10 } }, title: { display: true, text: '节拍(s)', font: { size: 10 } } },
+        y1: { position: 'right', ticks: { font: { size: 10 } },
+          title: { display: true, text: 'LOSS(min)', font: { size: 10 } }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+// ==================== FAILURE TAB ====================
+function getFilteredFailures() {
+  const period = document.getElementById('f_filter_period').value;
+  const all = getData().failures || [];
+  if (period === 'all') return all;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - parseInt(period));
+  const cutStr = cutoff.toISOString().slice(0,10);
+  return all.filter(f => f.date >= cutStr);
+}
+
+function renderFailures() {
+  const failures = getFilteredFailures();
+  const sorted = [...failures].sort((a,b) => b.date.localeCompare(a.date));
+  const rows = sorted.map(f => `
+    <tr>
+      <td>${f.date.slice(5).replace('-','/')}</td>
+      <td><span class="badge bg-secondary">${f.station}</span></td>
+      <td>${f.duration}</td>
+      <td>${f.output||0}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f.desc}">${f.desc||''}</td>
+      <td><button class="btn-icon text-danger" onclick="deleteFailure('${f.id}')" title="删除">🗑️</button></td>
+    </tr>`).join('');
+  document.getElementById('failureTbody').innerHTML = rows || '<tr><td colspan="6" class="no-data">暂无故障记录</td></tr>';
+  updateParetoChart();
+  renderTop3();
+}
+
+function addFailure() {
+  const date = document.getElementById('f_date').value;
+  const station = document.getElementById('f_station').value;
+  const duration = parseFloat(document.getElementById('f_duration').value);
+  const output = parseFloat(document.getElementById('f_output').value) || 0;
+  const desc = document.getElementById('f_desc').value;
+  if (!date || !station || isNaN(duration)) { alert('请填写日期、工站和宕机时长'); return; }
+  const d = getData();
+  if (!d.failures) d.failures = [];
+  d.failures.push({ id: 'f'+Date.now(), date, station, duration, output, desc });
+  persistData();
+  ['f_station','f_duration','f_output','f_desc'].forEach(id => document.getElementById(id).value = '');
+  renderFailures();
+}
+
+function deleteFailure(id) {
+  if (!confirm('确认删除此故障记录？')) return;
+  const d = getData();
+  d.failures = (d.failures||[]).filter(f => f.id !== id);
+  persistData();
+  renderFailures();
+}
+
+function getParetoData() {
+  const failures = getFilteredFailures();
+  const map = {};
+  failures.forEach(f => {
+    if (!map[f.station]) map[f.station] = 0;
+    map[f.station] += f.duration;
+  });
+  return Object.entries(map).sort((a,b) => b[1]-a[1]);
+}
+
+function updateParetoChart() {
+  const data = getParetoData();
+  if (!data.length) return;
+  const labels = data.map(d => d[0]);
+  const durations = data.map(d => d[1]);
+  const total = durations.reduce((a,b) => a+b, 0);
+  const cumPct = [];
+  let sum = 0;
+  durations.forEach(v => { sum += v; cumPct.push((sum/total*100).toFixed(1)); });
+
+  const COLORS = ['#1565C0','#1976D2','#2196F3','#42A5F5','#90CAF9','#BBDEFB','#CFD8DC','#B0BEC5'];
+
+  const ctx = document.getElementById('paretoChart').getContext('2d');
+  if (paretoChart) paretoChart.destroy();
+  paretoChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '宕机时长(min)', data: durations,
+          backgroundColor: durations.map((_,i) => COLORS[i % COLORS.length]),
+          borderRadius: 3, order: 2 },
+        { label: '累计占比(%)', data: cumPct,
+          type: 'line', borderColor: '#f44336', backgroundColor: 'transparent',
+          borderWidth: 2, pointRadius: 4, fill: false, order: 1, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 } } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: { ticks: { font: { size: 11 }, maxRotation: 30 } },
+        y: { ticks: { font: { size: 10 } }, title: { display: true, text: '宕机(min)', font: { size: 10 } }, beginAtZero: true },
+        y1: { position: 'right', min: 0, max: 110,
+          ticks: { font: { size: 10 }, callback: v => v + '%' },
+          title: { display: true, text: '累计%', font: { size: 10 } },
+          grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+}
+
+function renderTop3() {
+  const data = getParetoData().slice(0, 3);
+  const badges = ['gold','silver','bronze'];
+  const nums = ['TOP 1','TOP 2','TOP 3'];
+  const d = getData();
+  const meIssues = d.meIssues || [];
+
+  let html = '';
+  data.forEach((item, i) => {
+    const [station, duration] = item;
+    const issue = meIssues.find(m => m.station === station);
+    const statusClass = issue?.status === 'Done' ? 'badge-done' : (issue?.status === 'Ongoing' ? 'badge-ongoing' : 'badge-pending');
+    html += `<div class="border rounded p-2 mb-2">
+      <div class="d-flex align-items-center mb-1">
+        <span class="top3-badge ${badges[i]}">${i+1}</span>
+        <strong>${station}</strong>
+        <span class="ms-auto badge bg-danger">${duration} min</span>
+        ${issue ? `<span class="badge-status ${statusClass} ms-1">${issue.status}</span>` : ''}
+      </div>
+      ${issue ? `
+        <div style="font-size:11px;color:#555;margin-left:28px;">
+          <div>📋 <b>措施：</b>${issue.action||'-'}</div>
+          <div>👤 <b>负责：</b>${issue.owner||'-'} &nbsp; 📅 <b>计划：</b>${issue.dueDate||'-'}</div>
+        </div>` : `
+        <div style="font-size:11px;color:#999;margin-left:28px;">ME尚未填写根因措施 <button class="btn btn-sm btn-outline-danger ms-1 p-0 px-1" onclick="openEditME('${station}')">填写</button></div>`}
+    </div>`;
+  });
+
+  if (!html) html = '<div class="no-data">无故障记录，请先录入故障数据</div>';
+  document.getElementById('top3Container').innerHTML = html;
+  renderMEIssuesTable();
+}
+
+function renderMEIssuesTable() {
+  const issues = getData().meIssues || [];
+  const rows = issues.map(m => {
+    const sc = m.status==='Done'?'badge-done':(m.status==='Ongoing'?'badge-ongoing':'badge-pending');
+    return `<tr>
+      <td>${m.station}</td>
+      <td style="max-width:120px;font-size:11px">${m.currentState||''}</td>
+      <td style="max-width:150px;font-size:11px">${m.action||''}</td>
+      <td>${m.owner||''}</td>
+      <td>${m.dueDate||''}</td>
+      <td><span class="badge-status ${sc}">${m.status}</span></td>
+      <td>
+        <button class="btn-icon" onclick="openEditMEById('${m.id}')">✏️</button>
+        <button class="btn-icon text-danger" onclick="deleteMEIssue('${m.id}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('meIssuesTbody').innerHTML = rows || '<tr><td colspan="7" class="no-data">暂无ME专项问题</td></tr>';
+}
+
+function openAddMEIssue() {
+  document.getElementById('me_editId').value = '';
+  ['me_station','me_status','me_currentState','me_action','me_owner','me_dueDate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el.tagName === 'SELECT') el.value = el.options[0].value;
+    else el.value = '';
+  });
+  new bootstrap.Modal(document.getElementById('meIssueModal')).show();
+}
+function openEditME(station) {
+  const issue = (getData().meIssues||[]).find(m => m.station === station);
+  if (issue) openEditMEById(issue.id);
+  else {
+    openAddMEIssue();
+    document.getElementById('me_station').value = station;
+  }
+}
+function openEditMEById(id) {
+  const issue = (getData().meIssues||[]).find(m => m.id === id);
+  if (!issue) return;
+  document.getElementById('me_editId').value = id;
+  document.getElementById('me_station').value = issue.station;
+  document.getElementById('me_status').value = issue.status;
+  document.getElementById('me_currentState').value = issue.currentState||'';
+  document.getElementById('me_action').value = issue.action||'';
+  document.getElementById('me_owner').value = issue.owner||'';
+  document.getElementById('me_dueDate').value = issue.dueDate||'';
+  new bootstrap.Modal(document.getElementById('meIssueModal')).show();
+}
+function saveMEIssue() {
+  const id = document.getElementById('me_editId').value;
+  const station = document.getElementById('me_station').value;
+  const status = document.getElementById('me_status').value;
+  const currentState = document.getElementById('me_currentState').value;
+  const action = document.getElementById('me_action').value;
+  const owner = document.getElementById('me_owner').value;
+  const dueDate = document.getElementById('me_dueDate').value;
+  const d = getData();
+  if (!d.meIssues) d.meIssues = [];
+  if (id) {
+    const idx = d.meIssues.findIndex(m => m.id === id);
+    if (idx >= 0) d.meIssues[idx] = { ...d.meIssues[idx], station, status, currentState, action, owner, dueDate };
+  } else {
+    d.meIssues.push({ id:'me'+Date.now(), station, status, currentState, action, owner, dueDate });
+  }
+  persistData();
+  bootstrap.Modal.getInstance(document.getElementById('meIssueModal')).hide();
+  renderTop3();
+}
+function deleteMEIssue(id) {
+  if (!confirm('确认删除此ME问题？')) return;
+  const d = getData();
+  d.meIssues = (d.meIssues||[]).filter(m => m.id !== id);
+  persistData();
+  renderTop3();
+}
+
+// ==================== FTY TAB ====================
+function updateFtySummary() {
+  const d = getData().daily || {};
+  const date = selectedDate;
+  const ftyVal = d[date]?.fty;
+  const ftyTgt = FTY_TARGET_MAP[date];
+
+  document.getElementById('fty_today').textContent = ftyVal != null ? ftyVal.toFixed(2) + '%' : '-';
+  document.getElementById('fty_target').textContent = ftyTgt != null ? ftyTgt + '%' : '-';
+  document.getElementById('inp_fty_hidden') && (document.getElementById('inp_fty_hidden').value = ftyVal||'');
+
+  // Load FTY form
+  document.getElementById('fty_val').value = ftyVal != null ? ftyVal.toFixed(2) : '';
+
+  // 7-day average
+  const allDates = getEffectiveDates();
+  const idx = allDates.indexOf(date);
+  const last7 = allDates.slice(Math.max(0, idx-6), idx+1);
+  const vals = last7.map(dt => d[dt]?.fty).filter(v => v != null);
+  const avg7 = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) + '%' : '-';
+  document.getElementById('fty_avg7').textContent = avg7;
+
+  // Trend vs prev 7
+  const prev7 = allDates.slice(Math.max(0, idx-13), Math.max(0, idx-6));
+  const prevVals = prev7.map(dt => d[dt]?.fty).filter(v => v != null);
+  if (vals.length && prevVals.length) {
+    const curAvg = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const prvAvg = prevVals.reduce((a,b)=>a+b,0)/prevVals.length;
+    const diff = (curAvg - prvAvg).toFixed(2);
+    document.getElementById('fty_trend').textContent = (diff >= 0 ? '▲+' : '▼') + diff + '%';
+  } else {
+    document.getElementById('fty_trend').textContent = '-';
+  }
+}
+
+function saveFty() {
+  const val = parseFloat(document.getElementById('fty_val').value);
+  if (isNaN(val)) { alert('请输入FTY数值'); return; }
+  const d = getData();
+  if (!d.daily) d.daily = {};
+  if (!d.daily[selectedDate]) d.daily[selectedDate] = {};
+  d.daily[selectedDate].fty = val;
+  persistData();
+  const msg = document.getElementById('ftySaveMsg');
+  msg.textContent = `✅ ${selectedDate} FTY已保存: ${val}%`;
+  msg.style.display = 'block';
+  setTimeout(() => { msg.style.display = 'none'; }, 3000);
+  updateFtySummary();
+  updateFtyChart();
+}
+
+function updateFtyChart() {
+  const d = getData().daily || {};
+  let dates = DATES_HIST.filter(dt => d[dt]?.fty != null);
+  if (ftyRange === '7') dates = dates.slice(-7);
+  else if (ftyRange === '14') dates = dates.slice(-14);
+
+  const labels = dates.map(dt => dt.slice(5).replace('-','/'));
+  const actualData = dates.map(dt => d[dt]?.fty ?? null);
+  const targetData = dates.map(dt => FTY_TARGET_MAP[dt] ?? null);
+
+  const ctx = document.getElementById('ftyChart').getContext('2d');
+  if (ftyChart) ftyChart.destroy();
+  ftyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: '目标FTY(%)', data: targetData,
+          borderColor: '#f44336', backgroundColor: 'transparent',
+          borderWidth: 2, borderDash: [5,3], pointRadius: 2, fill: false, tension: 0.3 },
+        { label: '实际FTY(%)', data: actualData,
+          borderColor: '#4CAF50', backgroundColor: 'rgba(76,175,80,.15)',
+          borderWidth: 2.5, pointRadius: 4, fill: true, tension: 0.3,
+          pointBackgroundColor: dates.map((dt,i) => {
+            const a = actualData[i], t = targetData[i];
+            return a != null && t != null && a < t ? '#f44336' : '#4CAF50';
+          })
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 } } },
+        tooltip: { mode: 'index', intersect: false,
+          callbacks: {
+            afterBody: (items) => {
+              const i = items[0].dataIndex;
+              const a = actualData[i], t = targetData[i];
+              if (a != null && t != null) return [`Gap: ${(a-t).toFixed(2)}%`];
+              return [];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxRotation: 45 } },
+        y: { min: 40, max: 100,
+          ticks: { font: { size: 10 }, callback: v => v + '%' },
+          title: { display: true, text: 'FTY (%)', font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+function addFtyIssue() {
+  const date = document.getElementById('fi_date').value;
+  const top = parseInt(document.getElementById('fi_top').value);
+  const type = document.getElementById('fi_type').value;
+  const lossPct = parseFloat(document.getElementById('fi_loss_pct').value) || null;
+  const desc = document.getElementById('fi_desc').value;
+  const action = document.getElementById('fi_action').value;
+  const owner = document.getElementById('fi_owner').value;
+  const due = document.getElementById('fi_due').value;
+  const status = document.getElementById('fi_status').value;
+  if (!date || !type) { alert('请填写日期和问题类型'); return; }
+  const d = getData();
+  if (!d.ftyIssues) d.ftyIssues = [];
+  d.ftyIssues.push({ id:'fi'+Date.now(), date, top, type, lossPct, desc, action, owner, dueDate: due, status });
+  persistData();
+  renderFtyIssues();
+}
+
+function renderFtyIssues() {
+  const filter = document.getElementById('fi_filter').value;
+  let issues = getData().ftyIssues || [];
+  if (filter !== 'all') issues = issues.filter(i => i.status === filter);
+  issues = [...issues].sort((a,b) => b.date.localeCompare(a.date) || a.top - b.top);
+
+  const rows = issues.map(fi => {
+    const sc = fi.status==='Done'?'badge-done':(fi.status==='Ongoing'?'badge-ongoing':'badge-pending');
+    const topBadge = fi.top === 1 ? 'gold' : (fi.top === 2 ? 'silver' : 'bronze');
+    return `<tr>
+      <td style="white-space:nowrap">${fi.date.slice(5).replace('-','/')}</td>
+      <td><span class="top3-badge ${topBadge}" style="font-size:10px">${fi.top}</span></td>
+      <td><span class="badge bg-primary" style="font-size:10px">${fi.type}</span></td>
+      <td>${fi.lossPct != null ? fi.lossPct+'%' : '-'}</td>
+      <td style="max-width:120px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${fi.desc}">${fi.desc||''}</td>
+      <td style="max-width:150px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${fi.action}">${fi.action||''}</td>
+      <td>${fi.owner||''}</td>
+      <td style="white-space:nowrap">${fi.dueDate||''}</td>
+      <td><span class="badge-status ${sc}">${fi.status}</span></td>
+      <td>
+        <button class="btn-icon text-danger" onclick="deleteFtyIssue('${fi.id}')">🗑️</button>
+        <button class="btn-icon" onclick="toggleFtyStatus('${fi.id}')" title="切换状态">🔄</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('ftyIssuesTbody').innerHTML = rows || '<tr><td colspan="10" class="no-data">暂无FTY问题记录</td></tr>';
+}
+
+function deleteFtyIssue(id) {
+  if (!confirm('确认删除？')) return;
+  const d = getData();
+  d.ftyIssues = (d.ftyIssues||[]).filter(f => f.id !== id);
+  persistData();
+  renderFtyIssues();
+}
+function toggleFtyStatus(id) {
+  const d = getData();
+  const issue = (d.ftyIssues||[]).find(f => f.id === id);
+  if (!issue) return;
+  const order = ['待处理','Ongoing','Done'];
+  const idx = order.indexOf(issue.status);
+  issue.status = order[(idx+1) % order.length];
+  persistData();
+  renderFtyIssues();
+}
+
+// ==================== DASHBOARD ====================
+let dbRampChart=null, dbDowntimeChart=null, dbFtyMiniChart=null, dbOverviewChart=null;
+
+function renderDashboard() {
+  const d = getData().daily || {};
+  const today = selectedDate || todayStr();
+
+  // --- KPI Cards ---
+  const rec = d[today] || {};
+  const plan = PLAN_MAP[today];
+  const isPM = PM_DAYS.has(today);
+
+  document.getElementById('db_todayActual').textContent = rec.actual != null ? rec.actual + ' EA' : '-';
+  document.getElementById('db_todayPlan').textContent = isPM ? 'PM' : (plan || '-');
+  document.getElementById('db_designCap').textContent = DESIGN_CAP(today);
+
+  if (!isPM && typeof plan === 'number' && rec.actual != null) {
+    const ach = (rec.actual / plan * 100).toFixed(1) + '%';
+    document.getElementById('db_todayAch').textContent = ach;
+  } else { document.getElementById('db_todayAch').textContent = isPM ? 'PM日' : '-'; }
+
+  document.getElementById('db_todayLoss').textContent = rec.loss != null ? rec.loss + ' min' : '-';
+  document.getElementById('db_todayFty').textContent = rec.fty != null ? rec.fty.toFixed(1) + '%' : '-';
+  document.getElementById('db_ftyTarget').textContent = (FTY_TARGET_MAP[today] || '-') + (FTY_TARGET_MAP[today] ? '%' : '');
+
+  // Cumulative gap & totals
+  let cumGap = 0, totalActual = 0, totalPlan = 0, totalLoss = 0;
+  for (const dt of DATES_HIST) {
+    if (dt > today) break;
+    const p = PLAN_MAP[dt]; const a = d[dt]?.actual;
+    if (!PM_DAYS.has(dt) && typeof p === 'number' && a != null) {
+      cumGap += a - p; totalActual += a; totalPlan += p;
+    }
+    if (d[dt]?.loss) totalLoss += d[dt].loss;
+  }
+  document.getElementById('db_cumGap').textContent = (cumGap >= 0 ? '+' : '') + cumGap + ' EA';
+  document.getElementById('db_totalActual').textContent = totalActual;
+  document.getElementById('db_downtimeTotal').textContent = totalLoss;
+
+  // Open issues count
+  const meOpen = (getData().meIssues||[]).filter(m => m.status !== 'Done').length;
+  const ftyOpen = (getData().ftyIssues||[]).filter(f => f.status !== 'Done').length;
+  document.getElementById('db_openIssues').textContent = meOpen + ftyOpen;
+  document.getElementById('db_meOpen').textContent = meOpen;
+  document.getElementById('db_ftyOpen').textContent = ftyOpen;
+
+  // --- Gauge Ring ---
+  const pct = totalPlan > 0 ? Math.min(100, totalActual / totalPlan * 100) : 0;
+  const circ = 2 * Math.PI * 46; // 289
+  const offset = circ * (1 - pct / 100);
+  const ring = document.getElementById('db_gaugeRing');
+  ring.setAttribute('stroke-dashoffset', offset.toFixed(1));
+  ring.setAttribute('stroke', pct >= 90 ? '#4CAF50' : pct >= 70 ? '#FF9800' : '#f44336');
+  document.getElementById('db_gaugePct').textContent = pct.toFixed(1) + '%';
+  document.getElementById('db_g_actual').textContent = totalActual;
+  document.getElementById('db_g_plan').textContent = totalPlan;
+
+  // CT progress
+  const ctKeys = DATES_HIST.filter(dt => d[dt]?.ct != null);
+  const latestCt = ctKeys.length ? d[ctKeys[ctKeys.length-1]].ct : null;
+  const firstCtTarget = CT_TARGET_MAP['2026-03-20'];
+  const finalCtTarget = 354;
+  const ctPct = latestCt ? Math.max(0, Math.min(100, (firstCtTarget - latestCt) / (firstCtTarget - finalCtTarget) * 100)) : 0;
+  document.getElementById('db_ctProgress').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#555;margin-bottom:3px;">
+      <span>当前 <b>${latestCt || '-'}s</b></span>
+      <span>目标 <b>${finalCtTarget}s</b></span>
+    </div>
+    <div class="progress" style="height:8px;">
+      <div class="progress-bar" style="width:${ctPct.toFixed(1)}%;background:${ctPct>=80?'#4CAF50':'#2196F3'}"></div>
+    </div>
+    <div style="font-size:10px;color:#999;margin-top:2px;">节拍优化 ${ctPct.toFixed(1)}%</div>`;
+
+  // FTY 7-day avg
+  const ftyDates = DATES_HIST.filter(dt => d[dt]?.fty != null && dt <= today);
+  const last7 = ftyDates.slice(-7).map(dt => d[dt].fty);
+  const avg7 = last7.length ? (last7.reduce((a,b)=>a+b,0)/last7.length).toFixed(1) : null;
+  const ftyTgt7 = FTY_TARGET_MAP[today] || 93;
+  document.getElementById('db_fty7avg').textContent = avg7 ? avg7 + '%' : '-';
+  document.getElementById('db_fty7tgt').textContent = ftyTgt7 + '%';
+  document.getElementById('db_ftyBar').style.width = avg7 ? Math.min(100, parseFloat(avg7)/ftyTgt7*100).toFixed(1) + '%' : '0%';
+
+  // --- Charts ---
+  dbRenderRampChart(d, today);
+  dbRenderDowntimeChart();
+  dbRenderFtyMini(d, today);
+  dbRenderOverview(d, today);
+
+  // --- ME Issues List ---
+  const meIssues = (getData().meIssues||[]).filter(m => m.status !== 'Done');
+  document.getElementById('db_meIssuesList').innerHTML = meIssues.length
+    ? meIssues.map(m => `
+        <div class="issue-mini ${m.status==='Done'?'done':m.status==='Ongoing'?'ongoing':'pending'}">
+          <div class="im-top">
+            <span class="im-station">${m.station}</span>
+            <span class="badge-status badge-${m.status==='Done'?'done':m.status==='Ongoing'?'ongoing':'pending'}">${m.status}</span>
+            ${m.dueDate?`<span style="font-size:10px;color:#888;margin-left:auto">📅${m.dueDate.slice(5)}</span>`:''}
+          </div>
+          <div class="im-action">${(m.action||'').slice(0,60)}${(m.action||'').length>60?'…':''}</div>
+        </div>`).join('')
+    : '<div class="no-data">无进行中ME问题 🎉</div>';
+
+  // --- FTY Issues List ---
+  const ftyIssues = (getData().ftyIssues||[]).filter(f => f.status !== 'Done').slice(0,5);
+  document.getElementById('db_ftyIssuesList').innerHTML = ftyIssues.length
+    ? ftyIssues.map(fi => `
+        <div class="issue-mini ${fi.status==='Done'?'done':fi.status==='Ongoing'?'ongoing':'pending'}">
+          <div class="im-top">
+            <span class="top3-badge ${fi.top===1?'gold':fi.top===2?'silver':'bronze'}" style="width:18px;height:18px;font-size:9px">${fi.top}</span>
+            <span class="im-station">${fi.type}</span>
+            ${fi.lossPct?`<span style="font-size:10px;color:#f44336;font-weight:700">${fi.lossPct}%</span>`:''}
+          </div>
+          <div class="im-action">${(fi.desc||'').slice(0,55)}${(fi.desc||'').length>55?'…':''}</div>
+        </div>`).join('')
+    : '<div class="no-data">无进行中FTY问题 🎉</div>';
+
+  // Timestamp
+  document.getElementById('db_lastUpdate').textContent = '更新: ' + new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+}
+
+function dbRenderRampChart(d, today) {
+  const dates = DATES_HIST.filter(dt => dt <= today && !PM_DAYS.has(dt));
+  const labels = dates.map(dt => dt.slice(5).replace('-','/'));
+  const planData = dates.map(dt => typeof PLAN_MAP[dt]==='number' ? PLAN_MAP[dt] : null);
+  const actualData = dates.map(dt => d[dt]?.actual ?? null);
+  const designData = dates.map(dt => DESIGN_CAP(dt));
+
+  const ctx = document.getElementById('db_rampChart').getContext('2d');
+  if (dbRampChart) dbRampChart.destroy();
+  dbRampChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '设计产能', data: designData, type:'line',
+          borderColor:'rgba(176,190,197,.8)', borderDash:[3,2], borderWidth:1.5,
+          pointRadius:0, fill:false, order:0 },
+        { label: '计划', data: planData, type:'line',
+          borderColor:'#2196F3', borderWidth:2, pointRadius:2,
+          fill:false, tension:.3, order:1 },
+        { label: '实际', data: actualData,
+          backgroundColor: dates.map((_,i) => {
+            const a=actualData[i], p=planData[i];
+            if(a==null) return 'rgba(200,200,200,.3)';
+            return a>=p ? 'rgba(76,175,80,.8)' : 'rgba(244,67,54,.8)';
+          }),
+          borderRadius:2, order:2
+        }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'top',labels:{font:{size:10},boxWidth:12}},
+        tooltip:{mode:'index',intersect:false} },
+      scales:{
+        x:{ ticks:{font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:15} },
+        y:{ ticks:{font:{size:9}}, beginAtZero:true }
+      }
+    }
+  });
+}
+
+function dbRenderDowntimeChart() {
+  const failures = getData().failures || [];
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-14);
+  const cutStr = cutoff.toISOString().slice(0,10);
+  const recent = failures.filter(f => f.date >= cutStr);
+  const map = {};
+  recent.forEach(f => { map[f.station]=(map[f.station]||0)+f.duration; });
+  const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  if (!sorted.length) {
+    if (dbDowntimeChart) { dbDowntimeChart.destroy(); dbDowntimeChart=null; }
+    return;
+  }
+  const labels = sorted.map(x=>x[0]);
+  const vals = sorted.map(x=>x[1]);
+  const total = vals.reduce((a,b)=>a+b,0);
+  let cumSum=0;
+  const cumPct = vals.map(v => { cumSum+=v; return (cumSum/total*100).toFixed(1); });
+  const COLS=['#1565C0','#1976D2','#2196F3','#42A5F5','#64B5F6','#90CAF9','#B3C8F5','#CFD8DC'];
+
+  const ctx = document.getElementById('db_downtimeChart').getContext('2d');
+  if (dbDowntimeChart) dbDowntimeChart.destroy();
+  dbDowntimeChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'宕机(min)', data:vals,
+          backgroundColor:vals.map((_,i)=>COLS[i%COLS.length]), borderRadius:3, order:2 },
+        { label:'累计%', data:cumPct, type:'line',
+          borderColor:'#f44336', borderWidth:1.5, pointRadius:3,
+          fill:false, yAxisID:'y1', order:1 }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'top',labels:{font:{size:10},boxWidth:12}},
+        tooltip:{mode:'index',intersect:false} },
+      scales:{
+        x:{ticks:{font:{size:10},maxRotation:30}},
+        y:{ticks:{font:{size:9}},beginAtZero:true},
+        y1:{position:'right',min:0,max:110,
+          ticks:{font:{size:9},callback:v=>v+'%'}, grid:{drawOnChartArea:false}}
+      }
+    }
+  });
+}
+
+function dbRenderFtyMini(d, today) {
+  const dates = DATES_HIST.filter(dt => d[dt]?.fty != null && dt <= today).slice(-14);
+  const labels = dates.map(dt=>dt.slice(5).replace('-','/'));
+  const actual = dates.map(dt=>d[dt].fty);
+  const target = dates.map(dt=>FTY_TARGET_MAP[dt]||null);
+
+  const ctx = document.getElementById('db_ftyMiniChart').getContext('2d');
+  if (dbFtyMiniChart) dbFtyMiniChart.destroy();
+  dbFtyMiniChart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        { label:'目标', data:target, borderColor:'#f44336', borderDash:[4,2],
+          borderWidth:1.5, pointRadius:0, fill:false },
+        { label:'实际FTY', data:actual, borderColor:'#4CAF50', borderWidth:2,
+          pointRadius:3, fill:true,
+          backgroundColor:'rgba(76,175,80,.12)',
+          pointBackgroundColor:dates.map((_,i)=>actual[i]<(target[i]||0)?'#f44336':'#4CAF50') }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'top',labels:{font:{size:10},boxWidth:12}},
+        tooltip:{mode:'index',intersect:false} },
+      scales:{
+        x:{ticks:{font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:10}},
+        y:{min:50,max:100,ticks:{font:{size:9},callback:v=>v+'%'}}
+      }
+    }
+  });
+}
+
+function dbRenderOverview(d, today) {
+  const dates = DATES_HIST.filter(dt => dt <= today && !PM_DAYS.has(dt) && (d[dt]?.actual!=null||d[dt]?.fty!=null));
+  const labels = dates.map(dt=>dt.slice(5).replace('-','/'));
+  const achData = dates.map(dt => {
+    const p=PLAN_MAP[dt], a=d[dt]?.actual;
+    return (typeof p==='number' && a!=null) ? parseFloat((a/p*100).toFixed(1)) : null;
+  });
+  const ftyData = dates.map(dt => d[dt]?.fty ?? null);
+  const lossData = dates.map(dt => d[dt]?.loss ?? null);
+
+  const ctx = document.getElementById('db_overviewChart').getContext('2d');
+  if (dbOverviewChart) dbOverviewChart.destroy();
+  dbOverviewChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        { label:'达成率(%)', data:achData, type:'line',
+          borderColor:'#2196F3', borderWidth:2, pointRadius:2,
+          fill:false, tension:.3, yAxisID:'y' },
+        { label:'FTY(%)', data:ftyData, type:'line',
+          borderColor:'#4CAF50', borderWidth:2, pointRadius:2,
+          fill:false, tension:.3, yAxisID:'y' },
+        { label:'LOSS(min)', data:lossData,
+          backgroundColor:'rgba(244,67,54,.35)', borderRadius:2, yAxisID:'y1' }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'top',labels:{font:{size:10},boxWidth:12}},
+        tooltip:{mode:'index',intersect:false} },
+      scales:{
+        x:{ticks:{font:{size:8},maxRotation:45,autoSkip:true,maxTicksLimit:20}},
+        y:{min:0,max:140,ticks:{font:{size:8},callback:v=>v+'%'},
+          title:{display:true,text:'%',font:{size:9}}},
+        y1:{position:'right',beginAtZero:true,
+          ticks:{font:{size:8}},
+          title:{display:true,text:'min',font:{size:9}},
+          grid:{drawOnChartArea:false}}
+      }
+    }
+  });
+}
+
+// ==================== TAB SWITCHING ====================
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('#mainTabs .nav-link').forEach(l => l.classList.remove('active'));
+  document.getElementById(tabId).style.display = 'block';
+  btn.classList.add('active');
+
+  if (tabId === 'tab0') {
+    setTimeout(() => renderDashboard(), 50);
+  } else if (tabId === 'tab1') {
+    setTimeout(() => { updateProductionChart(); updateCtChart(); }, 50);
+  } else if (tabId === 'tab2') {
+    setTimeout(() => { renderFailures(); }, 50);
+  } else if (tabId === 'tab3') {
+    setTimeout(() => { updateFtyChart(); renderFtyIssues(); }, 50);
+  }
+}
+
+// ==================== EXPORT ====================
+function exportData() {
+  const data = getData();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'L4_日报数据_' + todayStr() + '.json';
+  a.click();
+}
+
+// ==================== INIT ====================
+document.addEventListener('DOMContentLoaded', async () => {
+  // Password gate
+  if (isSessionValid()) {
+    document.getElementById('lockScreen').style.display = 'none';
+  } else {
+    document.getElementById('lockScreen').style.display = 'flex';
+    document.getElementById('lockInput').focus();
+    await waitForUnlock();
+  }
+
+  initDefaultData();
+
+  const today = todayStr();
+  selectedDate = today;
+  document.getElementById('currentDate').value = today;
+  document.getElementById('f_date').value = today;
+  document.getElementById('fi_date').value = today;
+  document.getElementById('currentDate').addEventListener('change', onDateChange);
+
+  // Auto-connect Firebase if previously configured
+  const savedCfg = getFirebaseConfig();
+  if (savedCfg && savedCfg.apiKey) {
+    const ok = initFirebase(savedCfg);
+    if (ok) await pullFromFirestore();
+  } else {
+    setSyncBadge('⚙️ 配置云端', '#78909c');
+    // Show setup modal on very first open (no firebase config and no local data)
+    const hasLocal = localStorage.getItem('l4_report');
+    if (!hasLocal) {
+      setTimeout(() => new bootstrap.Modal(document.getElementById('cloudSetupModal')).show(), 600);
+    }
+  }
+
+  // Start on dashboard
+  document.getElementById('tab0').style.display = 'block';
+  updatePlanInfo();
+  updateFtyTargetInfo();
+  loadDailyForm();
+  updateProductionSummary();
+
+  setTimeout(() => renderDashboard(), 100);
+  setTimeout(() => { renderProductionTable(); renderFailures(); renderFtyIssues(); }, 300);
+});
+
+function waitForUnlock() {
+  return new Promise(resolve => {
+    const orig = window.doUnlock;
+    window.doUnlock = function() {
+      orig();
+      if (isSessionValid()) { window.doUnlock = orig; resolve(); }
+    };
+  });
+}
+</script>
+</body>
+</html>
